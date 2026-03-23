@@ -281,6 +281,7 @@ class TypeSummaryImpl;
 class TypeSummaryOptions;
 class TypeSystem;
 class TypeSystemClang;
+class TypeSystemFlang;
 class UUID;
 class UnixSignals;
 class Unwind;
