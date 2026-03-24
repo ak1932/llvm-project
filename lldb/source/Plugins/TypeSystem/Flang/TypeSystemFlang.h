@@ -138,7 +138,7 @@ class TypeSystemFlang : public TypeSystem {
 
   bool IsVoidType(lldb::opaque_compiler_type_t type) override { return false; }
 
-  bool CanPassInRegisters(const CompilerType &type) override { return false; }
+  bool CanPassInRegisters(const CompilerType &type) override { return true; }
 
   // Type Completion
 
@@ -150,7 +150,7 @@ class TypeSystemFlang : public TypeSystem {
 
   // AST related queries
 
-  uint32_t GetPointerByteSize() override { return 1; }
+  uint32_t GetPointerByteSize() override { return 8; }
 
   CompilerType GetPointerDiffType(bool is_signed) override { return CompilerType(); }
 
@@ -215,9 +215,8 @@ class TypeSystemFlang : public TypeSystem {
 
   // Exploring the type
 
-  llvm::fltSemantics flt;
   const llvm::fltSemantics &
-  GetFloatTypeSemantics(size_t byte_size, lldb::Format format) override { return flt; }
+  GetFloatTypeSemantics(size_t byte_size, lldb::Format format) override;
 
   llvm::Expected<uint64_t>
   GetBitSize(lldb::opaque_compiler_type_t type,
@@ -235,7 +234,7 @@ class TypeSystemFlang : public TypeSystem {
   lldb::BasicType
   GetBasicTypeEnumeration(lldb::opaque_compiler_type_t type) override { return lldb::BasicType {}; };
 
-  uint32_t GetNumFields(lldb::opaque_compiler_type_t type) override { return 0; };
+  uint32_t GetNumFields(lldb::opaque_compiler_type_t type) override { return 0; }
 
   CompilerType GetFieldAtIndex(lldb::opaque_compiler_type_t type,
                                        size_t idx, std::string &name,
@@ -270,14 +269,14 @@ class TypeSystemFlang : public TypeSystem {
       uint32_t &child_byte_size, int32_t &child_byte_offset,
       uint32_t &child_bitfield_bit_size, uint32_t &child_bitfield_bit_offset,
       bool &child_is_base_class, bool &child_is_deref_of_parent,
-      ValueObject *valobj, uint64_t &language_flags) override { return llvm::createStringError(llvm::inconvertibleErrorCode(), "unimplemented"); }
+      ValueObject *valobj, uint64_t &language_flags) override { return llvm::createStringError("no children for scalar types"); }
 
   // Lookup a child given a name. This function will match base class names and
   // member member names in "clang_type" only, not descendants.
   llvm::Expected<uint32_t>
   GetIndexOfChildWithName(lldb::opaque_compiler_type_t type,
                           llvm::StringRef name,
-                          bool omit_empty_base_classes) override { return llvm::createStringError(llvm::inconvertibleErrorCode(), "unimplemented"); } 
+                          bool omit_empty_base_classes) override { return llvm::createStringError("no children for scalar types"); }
 
   size_t GetIndexOfChildMemberWithName(
       lldb::opaque_compiler_type_t type, llvm::StringRef name,
@@ -320,15 +319,12 @@ class TypeSystemFlang : public TypeSystem {
   void Dump(llvm::raw_ostream &output, llvm::StringRef filter,
                 bool show_color) override {}
 
-  /// This is used by swift.
   bool IsRuntimeGeneratedType(lldb::opaque_compiler_type_t type) override { return false; }
-
-  // TODO: Determine if these methods should move to TypeSystemClang.
 
   bool IsPointerOrReferenceType(lldb::opaque_compiler_type_t type,
                                 CompilerType *pointee_type) override { return false; }
 
-  unsigned GetTypeQualifiers(lldb::opaque_compiler_type_t type) override { return 0; };
+  unsigned GetTypeQualifiers(lldb::opaque_compiler_type_t type) override { return 0; }
 
   std::optional<size_t>
   GetTypeBitAlign(lldb::opaque_compiler_type_t type,
