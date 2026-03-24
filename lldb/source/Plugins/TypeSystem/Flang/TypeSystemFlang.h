@@ -21,11 +21,24 @@
 class DWARFASTParserFlang;
 
 namespace lldb_private {
+
+enum class FlangTypeKind {
+  eInvalid,
+  eVoid,
+  eInteger,
+  eReal,
+  eLogical,
+};
+
+struct FlangType {
+  FlangTypeKind kind;
+  uint32_t bit_size;
+  ConstString name;
+};
+
 class TypeSystemFlang : public TypeSystem {
     static char ID;
 
-    protected:
-      std::unique_ptr<DWARFASTParserFlang> m_dwarf_ast_parser_up;
 
     public:
     TypeSystemFlang() = default;
@@ -88,7 +101,7 @@ class TypeSystemFlang : public TypeSystem {
 #ifndef NDEBUG
   /// Verify the integrity of the type to catch CompilerTypes that mix
   /// and match invalid TypeSystem/Opaque type pairs.
-  bool Verify(lldb::opaque_compiler_type_t type) override { return false; };
+  bool Verify(lldb::opaque_compiler_type_t type) override;
 #endif
 
   bool IsArrayType(lldb::opaque_compiler_type_t type,
@@ -99,11 +112,9 @@ class TypeSystemFlang : public TypeSystem {
 
   bool IsCharType(lldb::opaque_compiler_type_t type) override { return false; }
 
-  bool IsCompleteType(lldb::opaque_compiler_type_t type) override { return false; }
-
-  bool IsDefined(lldb::opaque_compiler_type_t type) override { return false; }
-
-  bool IsFloatingPointType(lldb::opaque_compiler_type_t type) override { return false; }
+  bool IsCompleteType(lldb::opaque_compiler_type_t type) override;
+  bool IsDefined(lldb::opaque_compiler_type_t type) override;
+  bool IsFloatingPointType(lldb::opaque_compiler_type_t type) override;
 
   bool IsFunctionType(lldb::opaque_compiler_type_t type) override { return false; }
 
@@ -123,7 +134,7 @@ class TypeSystemFlang : public TypeSystem {
                           CompilerType *function_pointer_type_ptr) override { return false; }
 
   bool IsIntegerType(lldb::opaque_compiler_type_t type,
-                     bool &is_signed) override { return false; }
+                     bool &is_signed) override;
 
   bool IsScopedEnumerationType(lldb::opaque_compiler_type_t type) override { return false; }
 
@@ -134,15 +145,15 @@ class TypeSystemFlang : public TypeSystem {
   bool IsPointerType(lldb::opaque_compiler_type_t type,
                      CompilerType *pointee_type) override { return false; }
 
-  bool IsScalarType(lldb::opaque_compiler_type_t type) override { return false; }
+  bool IsScalarType(lldb::opaque_compiler_type_t type) override;
 
-  bool IsVoidType(lldb::opaque_compiler_type_t type) override { return false; }
+  bool IsVoidType(lldb::opaque_compiler_type_t type) override;
 
   bool CanPassInRegisters(const CompilerType &type) override { return true; }
 
   // Type Completion
 
-  bool GetCompleteType(lldb::opaque_compiler_type_t type) override { return false; }
+  bool GetCompleteType(lldb::opaque_compiler_type_t type) override;
 
   bool IsForcefullyCompleted(lldb::opaque_compiler_type_t type) override {
     return false;
@@ -165,13 +176,11 @@ class TypeSystemFlang : public TypeSystem {
   // Accessors
 
   ConstString GetTypeName(lldb::opaque_compiler_type_t type,
-                                  bool BaseOnly) override { return ConstString {"type-name"}; }
+                          bool BaseOnly) override;
 
-  ConstString GetDisplayTypeName(lldb::opaque_compiler_type_t type) override { return ConstString {"display-type-name"}; }
+  ConstString GetDisplayTypeName(lldb::opaque_compiler_type_t type) override;
 
-  /// Defaults to GetTypeName(type).  Override if your language desires
-  /// specialized behavior.
-  ConstString GetMangledTypeName(lldb::opaque_compiler_type_t type)  override { return ConstString {"display-type-name"}; }
+  ConstString GetMangledTypeName(lldb::opaque_compiler_type_t type) override;
 
   uint32_t
   GetTypeInfo(lldb::opaque_compiler_type_t type,
@@ -180,7 +189,6 @@ class TypeSystemFlang : public TypeSystem {
   lldb::LanguageType
   GetMinimumLanguage(lldb::opaque_compiler_type_t type) override { return lldb::eLanguageTypeFortran95; }
 
-  lldb::TypeClass GetTypeClass(lldb::opaque_compiler_type_t type) override { return lldb::TypeClass(); };
 
   // Creating related types
 
@@ -188,7 +196,6 @@ class TypeSystemFlang : public TypeSystem {
   GetArrayElementType(lldb::opaque_compiler_type_t type,
                       ExecutionContextScope *exe_scope) override { return CompilerType(); }
 
-  CompilerType GetCanonicalType(lldb::opaque_compiler_type_t type) override { return CompilerType(); }
 
   CompilerType
   GetEnumerationIntegerType(lldb::opaque_compiler_type_t type) override { return CompilerType(); }
