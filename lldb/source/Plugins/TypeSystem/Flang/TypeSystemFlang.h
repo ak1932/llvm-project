@@ -14,6 +14,7 @@
 #include "lldb/Symbol/TypeSystem.h"
 #include "lldb/Utility/ConstString.h"
 #include "lldb/lldb-enumerations.h"
+#include "lldb/lldb-types.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/Support/Error.h"
 #include <optional>
@@ -31,9 +32,17 @@ enum class FlangTypeKind {
 };
 
 struct FlangType {
-  FlangTypeKind kind;
-  uint32_t bit_size;
+  FlangTypeKind kind = FlangTypeKind::eInvalid;
+  uint32_t bit_size = 0;
   ConstString name;
+
+  uint64_t string_length = 0;
+  bool is_complete = true;
+
+  FlangType() = default;
+
+  FlangType(FlangTypeKind kind, uint32_t bit_size, ConstString name)
+      : kind(kind), bit_size(bit_size), name(name) {}
 };
 
 class TypeSystemFlang : public TypeSystem {
@@ -184,18 +193,19 @@ class TypeSystemFlang : public TypeSystem {
 
   uint32_t
   GetTypeInfo(lldb::opaque_compiler_type_t type,
-              CompilerType *pointee_or_element_compiler_type) override { return 0; }
+              CompilerType *pointee_or_element_compiler_type) override;
 
   lldb::LanguageType
   GetMinimumLanguage(lldb::opaque_compiler_type_t type) override { return lldb::eLanguageTypeFortran95; }
 
 
-  // Creating related types
+  lldb::TypeClass GetTypeClass(lldb::opaque_compiler_type_t type) override;
 
   CompilerType
   GetArrayElementType(lldb::opaque_compiler_type_t type,
                       ExecutionContextScope *exe_scope) override { return CompilerType(); }
 
+  CompilerType GetCanonicalType(lldb::opaque_compiler_type_t type) override;
 
   CompilerType
   GetEnumerationIntegerType(lldb::opaque_compiler_type_t type) override { return CompilerType(); }
@@ -227,16 +237,16 @@ class TypeSystemFlang : public TypeSystem {
 
   llvm::Expected<uint64_t>
   GetBitSize(lldb::opaque_compiler_type_t type,
-             ExecutionContextScope *exe_scope) override { return llvm::createStringError(llvm::inconvertibleErrorCode(), "unimplemented"); }
+             ExecutionContextScope *exe_scope) override;
 
-  lldb::Encoding GetEncoding(lldb::opaque_compiler_type_t type) override { return lldb::Encoding {}; }
+  lldb::Encoding GetEncoding(lldb::opaque_compiler_type_t type) override;
 
-  lldb::Format GetFormat(lldb::opaque_compiler_type_t type) override { return lldb::Format {}; }
+  lldb::Format GetFormat(lldb::opaque_compiler_type_t type) override;
 
   llvm::Expected<uint32_t>
   GetNumChildren(lldb::opaque_compiler_type_t type,
                  bool omit_empty_base_classes,
-                 const ExecutionContext *exe_ctx) override { return llvm::createStringError(llvm::inconvertibleErrorCode(), "unimplemented"); };
+                 const ExecutionContext *exe_ctx) override;
 
   lldb::BasicType
   GetBasicTypeEnumeration(lldb::opaque_compiler_type_t type) override { return lldb::BasicType {}; };
@@ -365,7 +375,7 @@ class TypeSystemFlang : public TypeSystem {
                     CompilerType *element_type, uint64_t *size) override { return false; }
 
   CompilerType
-  GetFullyUnqualifiedType(lldb::opaque_compiler_type_t type) override { return CompilerType {}; }
+  GetFullyUnqualifiedType(lldb::opaque_compiler_type_t type) override;
 
   CompilerType
   GetNonReferenceType(lldb::opaque_compiler_type_t type) override { return CompilerType {}; }
@@ -375,6 +385,8 @@ class TypeSystemFlang : public TypeSystem {
 
   static llvm::Triple m_triple;
   static lldb::TargetWP m_target_wp;
+
+  lldb_private::CompilerType GetCompilerType(FlangType *ft);
 
 private:
   std::unique_ptr<DWARFASTParserFlang> m_dwarf_ast_parser_up;

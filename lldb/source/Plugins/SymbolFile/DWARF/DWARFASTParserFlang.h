@@ -32,7 +32,7 @@ public:
   lldb_private::Function *
   ParseFunctionFromDWARF(lldb_private::CompileUnit &comp_unit,
                          const lldb_private::plugin::dwarf::DWARFDIE &die,
-                         lldb_private::AddressRanges func_ranges) override { return nullptr; }
+                         lldb_private::AddressRanges func_ranges) override;
 
   bool CompleteTypeFromDWARF(
       const lldb_private::plugin::dwarf::DWARFDIE &die,
@@ -56,6 +56,8 @@ public:
 
 protected:
   lldb_private::TypeSystemFlang &m_ast;
+private:
+  lldb::TypeSP ParseBaseType(const lldb_private::plugin::dwarf::DWARFDIE &die);
 };
 
 #endif

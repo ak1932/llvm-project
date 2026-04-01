@@ -1,7 +1,17 @@
+#include "lldb/Core/DumpDataExtractor.h"
 #include "lldb/Core/PluginManager.h"
-#include "lldb/lldb-enumerations.h"
+#include "lldb/Host/StreamFile.h"
+#include "lldb/Symbol/CompilerType.h"
+#include "lldb/Target/Target.h"
+#include "lldb/Utility/LLDBLog.h"
+#include "lldb/Utility/Log.h"
 #include "Plugins/SymbolFile/DWARF/DWARFASTParserFlang.h"
 #include "TypeSystemFlang.h"
+#include "lldb/Utility/Stream.h"
+#include "lldb/lldb-enumerations.h"
+#include "lldb/lldb-types.h"
+#include "llvm/BinaryFormat/Dwarf.h"
+#include <cassert>
 
 using namespace lldb;
 using namespace lldb_private;
@@ -113,6 +123,12 @@ FlangType *TypeSystemFlang::GetOrCreateType(FlangTypeKind kind,
   return m_types.back().get();
 }
 
+CompilerType TypeSystemFlang::GetCompilerType(FlangType *ft) {
+  if (!ft)
+    return CompilerType();
+  return CompilerType(weak_from_this(), static_cast<void *>(ft));
+}
+
 CompilerType TypeSystemFlang::GetBuiltinTypeForDWARFEncodingAndBitSize(
     llvm::StringRef type_name, uint32_t dw_ate, uint32_t bit_size) {
   FlangTypeKind kind = FlangTypeKind::eInvalid;
@@ -150,7 +166,9 @@ bool TypeSystemFlang::Verify(lldb::opaque_compiler_type_t type) {
 #endif
 
 bool TypeSystemFlang::IsCompleteType(lldb::opaque_compiler_type_t type) {
-  return type != nullptr;
+  if (auto *ft = GetFlangType(type))
+    return ft->is_complete;
+  return false;
 }
 
 bool TypeSystemFlang::IsDefined(lldb::opaque_compiler_type_t type) {
@@ -214,11 +232,49 @@ TypeSystemFlang::GetMangledTypeName(lldb::opaque_compiler_type_t type) {
 
 lldb::TypeClass
 TypeSystemFlang::GetTypeClass(lldb::opaque_compiler_type_t type) {
-  if (type)
-    return lldb::eTypeClassBuiltin;
-  return lldb::eTypeClassInvalid;
+  auto *ft = GetFlangType(type);
+  if (!ft)
+    return lldb::eTypeClassInvalid;
+  return lldb::eTypeClassBuiltin;
 }
 
+uint32_t TypeSystemFlang::GetTypeInfo(
+    lldb::opaque_compiler_type_t type,
+    CompilerType *pointee_or_element_compiler_type) {
+  if (pointee_or_element_compiler_type)
+    pointee_or_element_compiler_type->Clear();
+
+  auto *ft = GetFlangType(type);
+  if (!ft)
+    return 0;
+
+  switch (ft->kind) {
+  case FlangTypeKind::eInteger:
+    return eTypeIsBuiltIn | eTypeHasValue | eTypeIsScalar | eTypeIsInteger |
+           eTypeIsSigned;
+  case FlangTypeKind::eReal:
+    return eTypeIsBuiltIn | eTypeHasValue | eTypeIsScalar | eTypeIsFloat;
+  case FlangTypeKind::eLogical:
+    return eTypeIsBuiltIn | eTypeHasValue | eTypeIsScalar;
+  default:
+    return 0;
+  }
+}
+
+CompilerType
+TypeSystemFlang::GetCanonicalType(lldb::opaque_compiler_type_t type) {
+    if (type) {
+        return CompilerType(weak_from_this(), type);
+    }
+    return CompilerType();
+}
+
+CompilerType
+TypeSystemFlang::GetFullyUnqualifiedType(lldb::opaque_compiler_type_t type) {
+  if (type)
+    return CompilerType(weak_from_this(), type);
+  return CompilerType();
+}
 
 llvm::Expected<uint64_t>
 TypeSystemFlang::GetBitSize(lldb::opaque_compiler_type_t type,
@@ -230,35 +286,35 @@ TypeSystemFlang::GetBitSize(lldb::opaque_compiler_type_t type,
 
 lldb::Encoding
 TypeSystemFlang::GetEncoding(lldb::opaque_compiler_type_t type) {
-  if (auto *ft = GetFlangType(type)) {
-    switch (ft->kind) {
-    case FlangTypeKind::eInteger:
-      return lldb::eEncodingSint;
-    case FlangTypeKind::eReal:
-      return lldb::eEncodingIEEE754;
-    case FlangTypeKind::eLogical:
-      return lldb::eEncodingUint;
-    default:
-      break;
-    }
+  auto *ft = GetFlangType(type);
+  if (!ft)
+    return lldb::eEncodingInvalid;
+  switch (ft->kind) {
+  case FlangTypeKind::eInteger:
+    return lldb::eEncodingSint;
+  case FlangTypeKind::eReal:
+    return lldb::eEncodingIEEE754;
+  case FlangTypeKind::eLogical:
+    return lldb::eEncodingUint;
+  default:
+    return lldb::eEncodingInvalid;
   }
-  return lldb::eEncodingInvalid;
 }
 
 lldb::Format TypeSystemFlang::GetFormat(lldb::opaque_compiler_type_t type) {
-  if (auto *ft = GetFlangType(type)) {
-    switch (ft->kind) {
-    case FlangTypeKind::eInteger:
-      return lldb::eFormatDecimal;
-    case FlangTypeKind::eReal:
-      return lldb::eFormatFloat;
-    case FlangTypeKind::eLogical:
-      return lldb::eFormatBoolean;
-    default:
-      break;
-    }
+  auto *ft = GetFlangType(type);
+  if (!ft)
+    return lldb::eFormatDefault;
+  switch (ft->kind) {
+  case FlangTypeKind::eInteger:
+    return lldb::eFormatDecimal;
+  case FlangTypeKind::eReal:
+    return lldb::eFormatFloat;
+  case FlangTypeKind::eLogical:
+    return lldb::eFormatBoolean;
+  default:
+    return lldb::eFormatDefault;
   }
-  return lldb::eFormatDefault;
 }
 
 llvm::Expected<uint32_t>
