@@ -51,15 +51,44 @@ TypeSystemFlangSupportsLanguage(lldb::LanguageType language) {
   // TypeSystems can support more than one language
 bool TypeSystemFlang::SupportsLanguage(lldb::LanguageType language) { return TypeSystemFlangSupportsLanguage(language); };
 
+llvm::Triple TypeSystemFlang::m_triple;
+lldb::TargetWP TypeSystemFlang::m_target_wp;
 lldb::TypeSystemSP TypeSystemFlang::CreateInstance(lldb::LanguageType language,
                                                    lldb_private::Module *module,
                                                    Target *target) {
   if (!TypeSystemFlangSupportsLanguage(language))
     return lldb::TypeSystemSP();
+  ArchSpec arch;
+  if (module)
+    arch = module->GetArchitecture();
+  else if (target)
+    arch = target->GetArchitecture();
 
-  return std::make_shared<TypeSystemFlang>();
+  if (!arch.IsValid())
+    return lldb::TypeSystemSP();
+
+  llvm::Triple triple = arch.GetTriple();
+  if (triple.getVendor() == llvm::Triple::Apple &&
+      triple.getOS() == llvm::Triple::UnknownOS) {
+    if (triple.getArch() == llvm::Triple::arm ||
+        triple.getArch() == llvm::Triple::aarch64 ||
+        triple.getArch() == llvm::Triple::aarch64_32 ||
+        triple.getArch() == llvm::Triple::thumb) {
+      triple.setOS(llvm::Triple::IOS);
+    } else {
+      triple.setOS(llvm::Triple::MacOSX);
+    }
+  }
+
+  if (module) {
+    return std::make_shared<TypeSystemFlang>();
+  } else if (target && target->IsValid()) {
+    m_target_wp = target->shared_from_this();
+    return std::make_shared<TypeSystemFlang>();
+  }
+
+  return lldb::TypeSystemSP();
 }
-
 
 void TypeSystemFlang::Initialize() {
   PluginManager::RegisterPlugin(
