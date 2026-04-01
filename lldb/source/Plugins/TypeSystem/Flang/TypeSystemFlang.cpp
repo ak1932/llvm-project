@@ -326,37 +326,37 @@ TypeSystemFlang::GetNumChildren(lldb::opaque_compiler_type_t type,
 
 lldb::BasicType
 TypeSystemFlang::GetBasicTypeEnumeration(lldb::opaque_compiler_type_t type) {
-  if (auto *ft = GetFlangType(type)) {
-    switch (ft->kind) {
-    case FlangTypeKind::eInteger:
-      switch (ft->bit_size) {
-      case 8:
-        return lldb::eBasicTypeChar;
-      case 16:
-        return lldb::eBasicTypeShort;
-      case 32:
-        return lldb::eBasicTypeInt;
-      case 64:
-        return lldb::eBasicTypeLongLong;
-      default:
-        return lldb::eBasicTypeInt;
-      }
-    case FlangTypeKind::eReal:
-      switch (ft->bit_size) {
-      case 32:
-        return lldb::eBasicTypeFloat;
-      case 64:
-        return lldb::eBasicTypeDouble;
-      default:
-        return lldb::eBasicTypeFloat;
-      }
-    case FlangTypeKind::eLogical:
-      return lldb::eBasicTypeBool;
+  auto *ft = GetFlangType(type);
+  if (!ft)
+    return lldb::eBasicTypeInvalid;
+  switch (ft->kind) {
+  case FlangTypeKind::eInteger:
+    switch (ft->bit_size) {
+    case 8:
+      return lldb::eBasicTypeChar;
+    case 16:
+      return lldb::eBasicTypeShort;
+    case 32:
+      return lldb::eBasicTypeInt;
+    case 64:
+      return lldb::eBasicTypeLongLong;
     default:
-      break;
+      return lldb::eBasicTypeInt;
     }
+  case FlangTypeKind::eReal:
+    switch (ft->bit_size) {
+    case 32:
+      return lldb::eBasicTypeFloat;
+    case 64:
+      return lldb::eBasicTypeDouble;
+    default:
+      return lldb::eBasicTypeFloat;
+    }
+  case FlangTypeKind::eLogical:
+    return lldb::eBasicTypeBool;
+  default:
+    return lldb::eBasicTypeInvalid;
   }
-  return lldb::eBasicTypeInvalid;
 }
 
 
@@ -367,6 +367,46 @@ TypeSystemFlang::GetTypeBitAlign(lldb::opaque_compiler_type_t type,
     return ft->bit_size;
   return std::nullopt;
 }
+
+const llvm::fltSemantics &
+TypeSystemFlang::GetFloatTypeSemantics(size_t byte_size, lldb::Format format) {
+  switch (byte_size) {
+  case 2:
+    return llvm::APFloat::IEEEhalf();
+  case 4:
+    return llvm::APFloat::IEEEsingle();
+  case 8:
+    return llvm::APFloat::IEEEdouble();
+  case 16:
+    return llvm::APFloat::IEEEquad();
+  default:
+    return llvm::APFloat::IEEEdouble();
+  }
+}
+bool TypeSystemFlang::DumpTypeValue(
+    lldb::opaque_compiler_type_t type, Stream &s, lldb::Format format,
+    const DataExtractor &data, lldb::offset_t data_offset,
+    size_t data_byte_size, uint32_t bitfield_bit_size,
+    uint32_t bitfield_bit_offset, ExecutionContextScope *exe_scope) {
+  if (!type)
+    return false;
+
+  if (format == lldb::eFormatDefault)
+    format = GetFormat(type);
+
+  uint32_t item_count = 1;
+  DumpDataExtractor(data, &s, data_offset, format, data_byte_size, item_count,
+                    UINT32_MAX, LLDB_INVALID_ADDRESS, bitfield_bit_size,
+                    bitfield_bit_offset, exe_scope);
+  return true;
+}
+
+void TypeSystemFlang::DumpTypeDescription(lldb::opaque_compiler_type_t type,
+                                          lldb::DescriptionLevel level) {
+  StreamFile s(stdout, false);
+  DumpTypeDescription(type, s, level);
+}
+
 void TypeSystemFlang::DumpTypeDescription(lldb::opaque_compiler_type_t type,
                                           Stream &s,
                                           lldb::DescriptionLevel level) {

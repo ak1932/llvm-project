@@ -249,7 +249,7 @@ class TypeSystemFlang : public TypeSystem {
                  const ExecutionContext *exe_ctx) override;
 
   lldb::BasicType
-  GetBasicTypeEnumeration(lldb::opaque_compiler_type_t type) override { return lldb::BasicType {}; };
+  GetBasicTypeEnumeration(lldb::opaque_compiler_type_t type) override;
 
   uint32_t GetNumFields(lldb::opaque_compiler_type_t type) override { return 0; }
 
@@ -314,7 +314,7 @@ class TypeSystemFlang : public TypeSystem {
   /// Dump the type to stdout.
   void DumpTypeDescription(
       lldb::opaque_compiler_type_t type,
-      lldb::DescriptionLevel level = lldb::eDescriptionLevelFull) override {}
+      lldb::DescriptionLevel level = lldb::eDescriptionLevelFull) override;
 
   /// Print a description of the type to a stream. The exact implementation
   /// varies, but the expectation is that eDescriptionLevelFull returns a
@@ -322,7 +322,7 @@ class TypeSystemFlang : public TypeSystem {
   /// does a dump of the underlying AST if applicable.
   void DumpTypeDescription(
       lldb::opaque_compiler_type_t type, Stream &s,
-      lldb::DescriptionLevel level = lldb::eDescriptionLevelFull) override {}
+      lldb::DescriptionLevel level = lldb::eDescriptionLevelFull) override;
 
   /// Dump a textual representation of the internal TypeSystem state to the
   /// given stream.
