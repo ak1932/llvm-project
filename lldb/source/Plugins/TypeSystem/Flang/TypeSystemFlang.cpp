@@ -141,6 +141,17 @@ FlangType *TypeSystemFlang::CreateCharacterType(uint64_t length,
   return ptr;
 }
 
+FlangType *TypeSystemFlang::CreateComplexType(uint32_t bit_size,
+                                              ConstString name) {
+  auto ft = std::make_unique<FlangType>();
+  ft->kind = FlangTypeKind::eComplex;
+  ft->bit_size = bit_size;
+  ft->name = name;
+  FlangType *ptr = ft.get();
+  m_types.push_back(std::move(ft));
+  return ptr;
+}
+
 CompilerType TypeSystemFlang::GetBuiltinTypeForDWARFEncodingAndBitSize(
     llvm::StringRef type_name, uint32_t dw_ate, uint32_t bit_size) {
   FlangTypeKind kind = FlangTypeKind::eInvalid;
@@ -155,6 +166,9 @@ CompilerType TypeSystemFlang::GetBuiltinTypeForDWARFEncodingAndBitSize(
     break;
   case llvm::dwarf::DW_ATE_float:
     kind = FlangTypeKind::eReal;
+    break;
+  case llvm::dwarf::DW_ATE_complex_float:
+    kind = FlangTypeKind::eComplex;
     break;
   default:
     return CompilerType();
@@ -210,6 +224,7 @@ bool TypeSystemFlang::IsScalarType(lldb::opaque_compiler_type_t type) {
     case FlangTypeKind::eInteger:
     case FlangTypeKind::eReal:
     case FlangTypeKind::eLogical:
+    case FlangTypeKind::eComplex:
       return true;
     default:
       return false;
@@ -281,6 +296,8 @@ uint32_t TypeSystemFlang::GetTypeInfo(
     return eTypeIsBuiltIn | eTypeHasValue | eTypeIsScalar | eTypeIsFloat;
   case FlangTypeKind::eLogical:
     return eTypeIsBuiltIn | eTypeHasValue | eTypeIsScalar;
+  case FlangTypeKind::eComplex:
+    return eTypeIsBuiltIn | eTypeHasValue | eTypeIsComplex | eTypeIsFloat;
   case FlangTypeKind::eCharacter:
     return eTypeIsBuiltIn | eTypeHasValue | eTypeHasChildren;
   default:
@@ -323,6 +340,8 @@ TypeSystemFlang::GetEncoding(lldb::opaque_compiler_type_t type) {
     return lldb::eEncodingIEEE754;
   case FlangTypeKind::eLogical:
     return lldb::eEncodingUint;
+  case FlangTypeKind::eComplex:
+    return lldb::eEncodingIEEE754;
   case FlangTypeKind::eCharacter:
     return lldb::eEncodingUint;
   default:
@@ -341,6 +360,8 @@ lldb::Format TypeSystemFlang::GetFormat(lldb::opaque_compiler_type_t type) {
     return lldb::eFormatFloat;
   case FlangTypeKind::eLogical:
     return lldb::eFormatBoolean;
+  case FlangTypeKind::eComplex:
+    return lldb::eFormatComplexFloat;
   case FlangTypeKind::eCharacter:
     return lldb::eFormatChar;
   default:
@@ -352,7 +373,15 @@ llvm::Expected<uint32_t>
 TypeSystemFlang::GetNumChildren(lldb::opaque_compiler_type_t type,
                                 bool omit_empty_base_classes,
                                 const ExecutionContext *exe_ctx) {
-  return 0;
+  auto *ft = GetFlangType(type);
+  if (!ft)
+    return 0;
+  switch (ft->kind) {
+  case FlangTypeKind::eComplex:
+    return 2;
+  default:
+    return 0;
+  }
 }
 
 lldb::BasicType
@@ -397,6 +426,63 @@ TypeSystemFlang::GetTypeBitAlign(lldb::opaque_compiler_type_t type,
   if (auto *ft = GetFlangType(type))
     return ft->bit_size;
   return std::nullopt;
+}
+
+llvm::Expected<CompilerType> TypeSystemFlang::GetChildCompilerTypeAtIndex(
+    lldb::opaque_compiler_type_t type, ExecutionContext *exe_ctx, size_t idx,
+    bool transparent_pointers, bool omit_empty_base_classes,
+    bool ignore_array_bounds, std::string &child_name,
+    uint32_t &child_byte_size, int32_t &child_byte_offset,
+    uint32_t &child_bitfield_bit_size, uint32_t &child_bitfield_bit_offset,
+    bool &child_is_base_class, bool &child_is_deref_of_parent,
+    ValueObject *valobj, uint64_t &language_flags) {
+
+  child_bitfield_bit_size = 0;
+  child_bitfield_bit_offset = 0;
+  child_is_base_class = false;
+  child_is_deref_of_parent = false;
+  language_flags = 0;
+
+  auto *ft = GetFlangType(type);
+  if (!ft)
+    return llvm::createStringError("invalid type");
+
+  switch (ft->kind) {
+  case FlangTypeKind::eComplex: {
+    if (idx > 1)
+      return llvm::createStringError("complex has only 2 children");
+    uint32_t half = ft->bit_size / 2;
+    child_byte_size = half / 8;
+    child_byte_offset = static_cast<int32_t>(idx * child_byte_size);
+    child_name = idx == 0 ? "real" : "imag";
+    FlangType *part =
+        GetOrCreateType(FlangTypeKind::eReal, half, ConstString("real"));
+    return GetCompilerType(part);
+  }
+  default:
+    return llvm::createStringError("type has no children");
+  }
+}
+
+
+llvm::Expected<uint32_t>
+TypeSystemFlang::GetIndexOfChildWithName(lldb::opaque_compiler_type_t type,
+                                         llvm::StringRef name,
+                                         bool omit_empty_base_classes) {
+  auto *ft = GetFlangType(type);
+  if (!ft)
+    return llvm::createStringError("invalid type");
+
+  if (ft->kind == FlangTypeKind::eComplex) {
+    if (name == "real")
+      return 0u;
+    if (name == "imag")
+      return 1u;
+    return llvm::createStringError("no child named '%s'",
+                                   name.str().c_str());
+  }
+
+  return llvm::createStringError("type has no children");
 }
 
 const llvm::fltSemantics &
