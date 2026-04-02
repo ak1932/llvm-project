@@ -146,6 +146,9 @@ lldb::TypeSP DWARFASTParserFlang::ParseTypeFromDWARF(
   case DW_TAG_base_type:
     type_sp = ParseBaseType(die);
     break;
+  case DW_TAG_pointer_type:
+    type_sp = ParsePointerType(die);
+    break;
   case DW_TAG_string_type:
     type_sp = ParseStringType(die);
     break;
@@ -186,6 +189,37 @@ DWARFASTParserFlang::ParseBaseType(const DWARFDIE &die) {
 
   Declaration decl;
   return dwarf->MakeType(die.GetID(), type_name,
+                         std::optional<uint64_t>(byte_size), nullptr,
+                         LLDB_INVALID_UID, Type::eEncodingIsUID, decl,
+                         compiler_type, Type::ResolveState::Full);
+}
+
+lldb::TypeSP
+DWARFASTParserFlang::ParsePointerType(const DWARFDIE &die) {
+  SymbolFileDWARF *dwarf = die.GetDWARF();
+
+  uint64_t byte_size =
+      die.GetAttributeValueAsUnsigned(DW_AT_byte_size,
+                                      m_ast.GetPointerByteSize());
+
+  DWARFDIE pointee_die = die.GetAttributeValueAsReferenceDIE(DW_AT_type);
+  FlangType *pointee_ft = nullptr;
+  if (pointee_die) {
+    Type *pointee_lldb_type = dwarf->ResolveTypeUID(pointee_die, true);
+    if (pointee_lldb_type) {
+      CompilerType pointee_ct = pointee_lldb_type->GetForwardCompilerType();
+      pointee_ft =
+          static_cast<FlangType *>(pointee_ct.GetOpaqueQualType());
+    }
+  }
+
+  FlangType *ptr_ft = m_ast.CreatePointerType(
+      pointee_ft, static_cast<uint32_t>(byte_size * 8));
+
+  CompilerType compiler_type = m_ast.GetCompilerType(ptr_ft);
+
+  Declaration decl;
+  return dwarf->MakeType(die.GetID(), ptr_ft->name,
                          std::optional<uint64_t>(byte_size), nullptr,
                          LLDB_INVALID_UID, Type::eEncodingIsUID, decl,
                          compiler_type, Type::ResolveState::Full);

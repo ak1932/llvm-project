@@ -31,6 +31,7 @@ enum class FlangTypeKind {
   eLogical,
   eComplex,
   eCharacter,
+  ePointer,
 };
 
 struct FlangType {
@@ -38,6 +39,7 @@ struct FlangType {
   uint32_t bit_size = 0;
   ConstString name;
 
+  FlangType *element_type = nullptr;
   uint64_t string_length = 0;
   bool is_complete = true;
 
@@ -72,6 +74,7 @@ class TypeSystemFlang : public TypeSystem {
   GetBuiltinTypeForDWARFEncodingAndBitSize(llvm::StringRef type_name,
                                            uint32_t dw_ate, uint32_t bit_size);
 
+  FlangType *CreatePointerType(FlangType *pointee, uint32_t pointer_bit_size);
   FlangType *CreateCharacterType(uint64_t length, uint32_t bit_size,
                                  ConstString name);
   FlangType *CreateComplexType(uint32_t bit_size, ConstString name);
@@ -160,7 +163,7 @@ class TypeSystemFlang : public TypeSystem {
                              bool check_cplusplus, bool check_objc) override { return false; }
 
   bool IsPointerType(lldb::opaque_compiler_type_t type,
-                     CompilerType *pointee_type) override { return false; }
+                     CompilerType *pointee_type) override;
 
   bool IsScalarType(lldb::opaque_compiler_type_t type) override;
 
@@ -234,9 +237,9 @@ class TypeSystemFlang : public TypeSystem {
   TypeMemberFunctionImpl
   GetMemberFunctionAtIndex(lldb::opaque_compiler_type_t type, size_t idx) override { return TypeMemberFunctionImpl{}; }
 
-  CompilerType GetPointeeType(lldb::opaque_compiler_type_t type) override { return CompilerType {}; }
+  CompilerType GetPointeeType(lldb::opaque_compiler_type_t type) override;
 
-  CompilerType GetPointerType(lldb::opaque_compiler_type_t type) override { return CompilerType {}; }
+  CompilerType GetPointerType(lldb::opaque_compiler_type_t type) override;
 
   // Exploring the type
 
@@ -285,7 +288,7 @@ class TypeSystemFlang : public TypeSystem {
   GetDereferencedType(lldb::opaque_compiler_type_t type,
                       ExecutionContext *exe_ctx, std::string &deref_name,
                       uint32_t &deref_byte_size, int32_t &deref_byte_offset,
-                      ValueObject *valobj, uint64_t &language_flags) override { return llvm::createStringError(llvm::inconvertibleErrorCode(), "unimplemented"); }
+                      ValueObject *valobj, uint64_t &language_flags) override;
 
   llvm::Expected<CompilerType> GetChildCompilerTypeAtIndex(
       lldb::opaque_compiler_type_t type, ExecutionContext *exe_ctx, size_t idx,
@@ -347,7 +350,7 @@ class TypeSystemFlang : public TypeSystem {
   bool IsRuntimeGeneratedType(lldb::opaque_compiler_type_t type) override { return false; }
 
   bool IsPointerOrReferenceType(lldb::opaque_compiler_type_t type,
-                                CompilerType *pointee_type) override { return false; }
+                                CompilerType *pointee_type) override;
 
   unsigned GetTypeQualifiers(lldb::opaque_compiler_type_t type) override { return 0; }
 

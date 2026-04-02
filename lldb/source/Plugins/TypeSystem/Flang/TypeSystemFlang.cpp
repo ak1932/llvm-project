@@ -128,6 +128,22 @@ CompilerType TypeSystemFlang::GetCompilerType(FlangType *ft) {
   return CompilerType(weak_from_this(), static_cast<void *>(ft));
 }
 
+FlangType *TypeSystemFlang::CreatePointerType(FlangType *pointee,
+                                              uint32_t pointer_bit_size) {
+  auto ft = std::make_unique<FlangType>();
+  ft->kind = FlangTypeKind::ePointer;
+  ft->bit_size = pointer_bit_size;
+  ft->element_type = pointee;
+  if (pointee)
+    ft->name = ConstString(std::string("PTR TO ") +
+                           pointee->name.GetStringRef().str());
+  else
+    ft->name = ConstString("PTR");
+  FlangType *ptr = ft.get();
+  m_types.push_back(std::move(ft));
+  return ptr;
+}
+
 FlangType *TypeSystemFlang::CreateCharacterType(uint64_t length,
                                                 uint32_t bit_size,
                                                 ConstString name) {
@@ -225,6 +241,7 @@ bool TypeSystemFlang::IsScalarType(lldb::opaque_compiler_type_t type) {
     case FlangTypeKind::eReal:
     case FlangTypeKind::eLogical:
     case FlangTypeKind::eComplex:
+    case FlangTypeKind::ePointer:
       return true;
     default:
       return false;
@@ -232,6 +249,7 @@ bool TypeSystemFlang::IsScalarType(lldb::opaque_compiler_type_t type) {
   }
   return false;
 }
+
 bool TypeSystemFlang::IsVoidType(lldb::opaque_compiler_type_t type) {
   if (auto *ft = GetFlangType(type))
     return ft->kind == FlangTypeKind::eVoid;
@@ -244,6 +262,21 @@ bool TypeSystemFlang::IsCharType(lldb::opaque_compiler_type_t type) {
   if (!ft)
     return false;
   return ft->kind == FlangTypeKind::eCharacter;
+}
+
+bool TypeSystemFlang::IsPointerType(lldb::opaque_compiler_type_t type,
+                                    CompilerType *pointee_type) {
+  auto *ft = GetFlangType(type);
+  if (!ft || ft->kind != FlangTypeKind::ePointer)
+    return false;
+  if (pointee_type && ft->element_type)
+    *pointee_type = GetCompilerType(ft->element_type);
+  return true;
+}
+
+bool TypeSystemFlang::IsPointerOrReferenceType(
+    lldb::opaque_compiler_type_t type, CompilerType *pointee_type) {
+  return IsPointerType(type, pointee_type);
 }
 
 bool TypeSystemFlang::GetCompleteType(lldb::opaque_compiler_type_t type) {
@@ -275,7 +308,13 @@ TypeSystemFlang::GetTypeClass(lldb::opaque_compiler_type_t type) {
   auto *ft = GetFlangType(type);
   if (!ft)
     return lldb::eTypeClassInvalid;
-  return lldb::eTypeClassBuiltin;
+
+  switch (ft->kind) {
+  case FlangTypeKind::ePointer:
+    return lldb::eTypeClassPointer;
+  default:
+    return lldb::eTypeClassBuiltin;
+  }
 }
 
 uint32_t TypeSystemFlang::GetTypeInfo(
@@ -300,6 +339,10 @@ uint32_t TypeSystemFlang::GetTypeInfo(
     return eTypeIsBuiltIn | eTypeHasValue | eTypeIsComplex | eTypeIsFloat;
   case FlangTypeKind::eCharacter:
     return eTypeIsBuiltIn | eTypeHasValue | eTypeHasChildren;
+  case FlangTypeKind::ePointer:
+    if (pointee_or_element_compiler_type && ft->element_type)
+      *pointee_or_element_compiler_type = GetCompilerType(ft->element_type);
+    return eTypeHasValue | eTypeIsPointer;
   default:
     return 0;
   }
@@ -344,6 +387,8 @@ TypeSystemFlang::GetEncoding(lldb::opaque_compiler_type_t type) {
     return lldb::eEncodingIEEE754;
   case FlangTypeKind::eCharacter:
     return lldb::eEncodingUint;
+  case FlangTypeKind::ePointer:
+    return lldb::eEncodingUint;
   default:
     return lldb::eEncodingInvalid;
   }
@@ -364,6 +409,8 @@ lldb::Format TypeSystemFlang::GetFormat(lldb::opaque_compiler_type_t type) {
     return lldb::eFormatComplexFloat;
   case FlangTypeKind::eCharacter:
     return lldb::eFormatChar;
+  case FlangTypeKind::ePointer:
+    return lldb::eFormatHex;
   default:
     return lldb::eFormatDefault;
   }
@@ -377,6 +424,8 @@ TypeSystemFlang::GetNumChildren(lldb::opaque_compiler_type_t type,
   if (!ft)
     return 0;
   switch (ft->kind) {
+  case FlangTypeKind::ePointer:
+    return ft->element_type ? 1 : 0;
   case FlangTypeKind::eComplex:
     return 2;
   default:
@@ -448,6 +497,15 @@ llvm::Expected<CompilerType> TypeSystemFlang::GetChildCompilerTypeAtIndex(
     return llvm::createStringError("invalid type");
 
   switch (ft->kind) {
+  case FlangTypeKind::ePointer: {
+    if (idx != 0 || !ft->element_type)
+      return llvm::createStringError("invalid pointer child index");
+    child_is_deref_of_parent = true;
+    child_byte_size = ft->element_type->bit_size / 8;
+    child_byte_offset = 0;
+    child_name = "*";
+    return GetCompilerType(ft->element_type);
+  }
   case FlangTypeKind::eComplex: {
     if (idx > 1)
       return llvm::createStringError("complex has only 2 children");
@@ -473,6 +531,13 @@ TypeSystemFlang::GetIndexOfChildWithName(lldb::opaque_compiler_type_t type,
   if (!ft)
     return llvm::createStringError("invalid type");
 
+  if (ft->kind == FlangTypeKind::ePointer) {
+    if (name == "*")
+      return 0u;
+    return llvm::createStringError("no child named '%s'",
+                                   name.str().c_str());
+  }
+
   if (ft->kind == FlangTypeKind::eComplex) {
     if (name == "real")
       return 0u;
@@ -483,6 +548,40 @@ TypeSystemFlang::GetIndexOfChildWithName(lldb::opaque_compiler_type_t type,
   }
 
   return llvm::createStringError("type has no children");
+}
+
+
+CompilerType
+TypeSystemFlang::GetPointeeType(lldb::opaque_compiler_type_t type) {
+  auto *ft = GetFlangType(type);
+  if (ft && ft->kind == FlangTypeKind::ePointer && ft->element_type)
+    return GetCompilerType(ft->element_type);
+  return CompilerType();
+}
+
+CompilerType
+TypeSystemFlang::GetPointerType(lldb::opaque_compiler_type_t type) {
+  auto *ft = GetFlangType(type);
+  if (!ft)
+    return CompilerType();
+  FlangType *ptr_type = CreatePointerType(ft, GetPointerByteSize() * 8);
+  return GetCompilerType(ptr_type);
+}
+
+llvm::Expected<CompilerType> TypeSystemFlang::GetDereferencedType(
+    lldb::opaque_compiler_type_t type, ExecutionContext *exe_ctx,
+    std::string &deref_name, uint32_t &deref_byte_size,
+    int32_t &deref_byte_offset, ValueObject *valobj,
+    uint64_t &language_flags) {
+  auto *ft = GetFlangType(type);
+  if (!ft || ft->kind != FlangTypeKind::ePointer || !ft->element_type)
+    return llvm::createStringError("not a pointer type");
+
+  deref_name = "*";
+  deref_byte_size = ft->element_type->bit_size / 8;
+  deref_byte_offset = 0;
+  language_flags = 0;
+  return GetCompilerType(ft->element_type);
 }
 
 const llvm::fltSemantics &
