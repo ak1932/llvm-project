@@ -29,6 +29,7 @@ enum class FlangTypeKind {
   eInteger,
   eReal,
   eLogical,
+  eCharacter
 };
 
 struct FlangType {
@@ -119,7 +120,7 @@ class TypeSystemFlang : public TypeSystem {
 
   bool IsAggregateType(lldb::opaque_compiler_type_t type) override { return false; }
 
-  bool IsCharType(lldb::opaque_compiler_type_t type) override { return false; }
+  bool IsCharType(lldb::opaque_compiler_type_t type) override;
 
   bool IsCompleteType(lldb::opaque_compiler_type_t type) override;
   bool IsDefined(lldb::opaque_compiler_type_t type) override;
@@ -309,7 +310,7 @@ class TypeSystemFlang : public TypeSystem {
                      lldb::offset_t data_offset, size_t data_byte_size,
                      uint32_t bitfield_bit_size,
                      uint32_t bitfield_bit_offset,
-                     ExecutionContextScope *exe_scope) override { return false; }
+                     ExecutionContextScope *exe_scope) override;
 
   /// Dump the type to stdout.
   void DumpTypeDescription(
@@ -345,9 +346,7 @@ class TypeSystemFlang : public TypeSystem {
 
   std::optional<size_t>
   GetTypeBitAlign(lldb::opaque_compiler_type_t type,
-                  ExecutionContextScope *exe_scope) override {
-      return std::nullopt;
-  };
+                  ExecutionContextScope *exe_scope) override;
 
   CompilerType GetBasicTypeFromAST(lldb::BasicType basic_type) override {
       return CompilerType {};
@@ -385,6 +384,9 @@ class TypeSystemFlang : public TypeSystem {
 
   static llvm::Triple m_triple;
   static lldb::TargetWP m_target_wp;
+
+  FlangType *CreateCharacterType(uint64_t length, uint32_t bit_size,
+                                 ConstString name);
 
   lldb_private::CompilerType GetCompilerType(FlangType *ft);
 

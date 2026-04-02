@@ -58,6 +58,7 @@ protected:
   lldb_private::TypeSystemFlang &m_ast;
 private:
   lldb::TypeSP ParseBaseType(const lldb_private::plugin::dwarf::DWARFDIE &die);
+  lldb::TypeSP ParseStringType(const lldb_private::plugin::dwarf::DWARFDIE &die);
 };
 
 #endif

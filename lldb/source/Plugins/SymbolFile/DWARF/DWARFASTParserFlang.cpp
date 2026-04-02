@@ -146,6 +146,9 @@ lldb::TypeSP DWARFASTParserFlang::ParseTypeFromDWARF(
   case DW_TAG_base_type:
     type_sp = ParseBaseType(die);
     break;
+  case DW_TAG_string_type:
+    type_sp = ParseStringType(die);
+    break;
   default:
     break;
   }
@@ -188,3 +191,32 @@ DWARFASTParserFlang::ParseBaseType(const DWARFDIE &die) {
                          compiler_type, Type::ResolveState::Full);
 }
 
+lldb::TypeSP
+DWARFASTParserFlang::ParseStringType(const DWARFDIE &die) {
+  SymbolFileDWARF *dwarf = die.GetDWARF();
+
+  const char *name_cstr =
+      die.GetAttributeValueAsString(DW_AT_name, nullptr);
+  ConstString type_name(name_cstr ? name_cstr : "character");
+
+  uint64_t byte_size =
+      die.GetAttributeValueAsUnsigned(DW_AT_byte_size, 0);
+  if (byte_size == 0) {
+    // Try DW_AT_string_length as a constant
+    byte_size = die.GetAttributeValueAsUnsigned(DW_AT_string_length, 1);
+  }
+
+  uint64_t string_length = byte_size;
+  uint32_t bit_size = static_cast<uint32_t>(byte_size * 8);
+
+  FlangType *char_ft =
+      m_ast.CreateCharacterType(string_length, bit_size, type_name);
+
+  CompilerType compiler_type = m_ast.GetCompilerType(char_ft);
+
+  Declaration decl;
+  return dwarf->MakeType(die.GetID(), type_name,
+                         std::optional<uint64_t>(byte_size), nullptr,
+                         LLDB_INVALID_UID, Type::eEncodingIsUID, decl,
+                         compiler_type, Type::ResolveState::Full);
+}

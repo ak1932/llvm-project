@@ -58,8 +58,7 @@ TypeSystemFlangSupportsLanguage(lldb::LanguageType language) {
           language == lldb::eLanguageTypeFortran95; 
 }
 
-  // TypeSystems can support more than one language
-bool TypeSystemFlang::SupportsLanguage(lldb::LanguageType language) { return TypeSystemFlangSupportsLanguage(language); };
+bool TypeSystemFlang::SupportsLanguage(lldb::LanguageType language) { return TypeSystemFlangSupportsLanguage(language); }
 
 llvm::Triple TypeSystemFlang::m_triple;
 lldb::TargetWP TypeSystemFlang::m_target_wp;
@@ -127,6 +126,19 @@ CompilerType TypeSystemFlang::GetCompilerType(FlangType *ft) {
   if (!ft)
     return CompilerType();
   return CompilerType(weak_from_this(), static_cast<void *>(ft));
+}
+
+FlangType *TypeSystemFlang::CreateCharacterType(uint64_t length,
+                                                uint32_t bit_size,
+                                                ConstString name) {
+  auto ft = std::make_unique<FlangType>();
+  ft->kind = FlangTypeKind::eCharacter;
+  ft->bit_size = bit_size;
+  ft->name = name;
+  ft->string_length = length;
+  FlangType *ptr = ft.get();
+  m_types.push_back(std::move(ft));
+  return ptr;
 }
 
 CompilerType TypeSystemFlang::GetBuiltinTypeForDWARFEncodingAndBitSize(
@@ -212,6 +224,19 @@ bool TypeSystemFlang::IsVoidType(lldb::opaque_compiler_type_t type) {
 }
 
 
+bool TypeSystemFlang::IsCharType(lldb::opaque_compiler_type_t type) {
+  auto *ft = GetFlangType(type);
+  if (!ft)
+    return false;
+  return ft->kind == FlangTypeKind::eCharacter;
+}
+
+bool TypeSystemFlang::GetCompleteType(lldb::opaque_compiler_type_t type) {
+  if (auto *ft = GetFlangType(type))
+    return ft->is_complete;
+  return false;
+}
+
 ConstString TypeSystemFlang::GetTypeName(lldb::opaque_compiler_type_t type,
                                          bool BaseOnly) {
   if (auto *ft = GetFlangType(type))
@@ -256,6 +281,8 @@ uint32_t TypeSystemFlang::GetTypeInfo(
     return eTypeIsBuiltIn | eTypeHasValue | eTypeIsScalar | eTypeIsFloat;
   case FlangTypeKind::eLogical:
     return eTypeIsBuiltIn | eTypeHasValue | eTypeIsScalar;
+  case FlangTypeKind::eCharacter:
+    return eTypeIsBuiltIn | eTypeHasValue | eTypeHasChildren;
   default:
     return 0;
   }
@@ -296,6 +323,8 @@ TypeSystemFlang::GetEncoding(lldb::opaque_compiler_type_t type) {
     return lldb::eEncodingIEEE754;
   case FlangTypeKind::eLogical:
     return lldb::eEncodingUint;
+  case FlangTypeKind::eCharacter:
+    return lldb::eEncodingUint;
   default:
     return lldb::eEncodingInvalid;
   }
@@ -312,6 +341,8 @@ lldb::Format TypeSystemFlang::GetFormat(lldb::opaque_compiler_type_t type) {
     return lldb::eFormatFloat;
   case FlangTypeKind::eLogical:
     return lldb::eFormatBoolean;
+  case FlangTypeKind::eCharacter:
+    return lldb::eFormatChar;
   default:
     return lldb::eFormatDefault;
   }
