@@ -146,6 +146,10 @@ lldb::TypeSP DWARFASTParserFlang::ParseTypeFromDWARF(
   case DW_TAG_base_type:
     type_sp = ParseBaseType(die);
     break;
+  case DW_TAG_structure_type:
+  case DW_TAG_class_type:
+    type_sp = ParseStructureType(sc, die);
+    break;
   case DW_TAG_pointer_type:
     type_sp = ParsePointerType(die);
     break;
@@ -186,6 +190,58 @@ DWARFASTParserFlang::ParseBaseType(const DWARFDIE &die) {
 
   if (!compiler_type)
     return nullptr;
+
+  Declaration decl;
+  return dwarf->MakeType(die.GetID(), type_name,
+                         std::optional<uint64_t>(byte_size), nullptr,
+                         LLDB_INVALID_UID, Type::eEncodingIsUID, decl,
+                         compiler_type, Type::ResolveState::Full);
+}
+
+lldb::TypeSP DWARFASTParserFlang::ParseStructureType(const SymbolContext &sc,
+                                                     const DWARFDIE &die) {
+  SymbolFileDWARF *dwarf = die.GetDWARF();
+
+  const char *name_cstr =
+      die.GetAttributeValueAsString(DW_AT_name, nullptr);
+  ConstString type_name(name_cstr ? name_cstr : "");
+
+  uint64_t byte_size =
+      die.GetAttributeValueAsUnsigned(DW_AT_byte_size, 0);
+  uint32_t bit_size = static_cast<uint32_t>(byte_size * 8);
+
+  FlangType *struct_ft = m_ast.CreateStructureType(type_name, bit_size);
+
+  // Parse member children
+  for (DWARFDIE child = die.GetFirstChild(); child;
+       child = child.GetSibling()) {
+    if (child.Tag() != DW_TAG_member)
+      continue;
+
+    const char *member_name_cstr =
+        child.GetAttributeValueAsString(DW_AT_name, nullptr);
+    ConstString member_name(member_name_cstr ? member_name_cstr : "");
+
+    uint64_t member_byte_offset =
+        child.GetAttributeValueAsUnsigned(DW_AT_data_member_location, 0);
+
+    DWARFDIE member_type_die =
+        child.GetAttributeValueAsReferenceDIE(DW_AT_type);
+    Type *member_lldb_type = dwarf->ResolveTypeUID(member_type_die, true);
+    FlangType *member_ft = nullptr;
+    if (member_lldb_type) {
+      CompilerType member_ct = member_lldb_type->GetForwardCompilerType();
+      member_ft =
+          static_cast<FlangType *>(member_ct.GetOpaqueQualType());
+    }
+
+    m_ast.AddFieldToStructure(struct_ft, member_name, member_ft,
+                              member_byte_offset * 8);
+  }
+
+  struct_ft->is_complete = true;
+
+  CompilerType compiler_type = m_ast.GetCompilerType(struct_ft);
 
   Declaration decl;
   return dwarf->MakeType(die.GetID(), type_name,

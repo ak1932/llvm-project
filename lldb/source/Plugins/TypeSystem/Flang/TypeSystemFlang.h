@@ -32,6 +32,15 @@ enum class FlangTypeKind {
   eComplex,
   eCharacter,
   ePointer,
+  eStructure,
+};
+
+struct FlangType;
+
+struct FlangFieldInfo {
+  ConstString name;
+  FlangType *type = nullptr;
+  uint64_t bit_offset = 0;
 };
 
 struct FlangType {
@@ -40,6 +49,7 @@ struct FlangType {
   ConstString name;
 
   FlangType *element_type = nullptr;
+  std::vector<FlangFieldInfo> fields;
   uint64_t string_length = 0;
   bool is_complete = true;
 
@@ -74,6 +84,9 @@ class TypeSystemFlang : public TypeSystem {
   GetBuiltinTypeForDWARFEncodingAndBitSize(llvm::StringRef type_name,
                                            uint32_t dw_ate, uint32_t bit_size);
 
+  FlangType *CreateStructureType(ConstString name, uint32_t bit_size);
+  void AddFieldToStructure(FlangType *struct_type, ConstString name,
+                           FlangType *field_type, uint64_t bit_offset);
   FlangType *CreatePointerType(FlangType *pointee, uint32_t pointer_bit_size);
   FlangType *CreateCharacterType(uint64_t length, uint32_t bit_size,
                                  ConstString name);
@@ -128,7 +141,7 @@ class TypeSystemFlang : public TypeSystem {
                    CompilerType *element_type, uint64_t *size,
                    bool *is_incomplete) override { return false; }
 
-  bool IsAggregateType(lldb::opaque_compiler_type_t type) override { return false; }
+  bool IsAggregateType(lldb::opaque_compiler_type_t type) override;
 
   bool IsCharType(lldb::opaque_compiler_type_t type) override;
 
@@ -262,13 +275,13 @@ class TypeSystemFlang : public TypeSystem {
   lldb::BasicType
   GetBasicTypeEnumeration(lldb::opaque_compiler_type_t type) override;
 
-  uint32_t GetNumFields(lldb::opaque_compiler_type_t type) override { return 0; }
+  uint32_t GetNumFields(lldb::opaque_compiler_type_t type) override;
 
   CompilerType GetFieldAtIndex(lldb::opaque_compiler_type_t type,
                                        size_t idx, std::string &name,
                                        uint64_t *bit_offset_ptr,
                                        uint32_t *bitfield_bit_size_ptr,
-                                       bool *is_bitfield_ptr) override { return CompilerType {}; }
+                                       bool *is_bitfield_ptr) override;
 
   uint32_t
   GetNumDirectBaseClasses(lldb::opaque_compiler_type_t type) override { return 0; }
@@ -308,7 +321,7 @@ class TypeSystemFlang : public TypeSystem {
 
   size_t GetIndexOfChildMemberWithName(
       lldb::opaque_compiler_type_t type, llvm::StringRef name,
-      bool omit_empty_base_classes, std::vector<uint32_t> &child_indexes) override { return 0; }
+      bool omit_empty_base_classes, std::vector<uint32_t> &child_indexes) override;
 
   bool IsTemplateType(lldb::opaque_compiler_type_t type) override { return false; }
 

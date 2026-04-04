@@ -114,7 +114,8 @@ FlangType *TypeSystemFlang::GetOrCreateType(FlangTypeKind kind,
                                             uint32_t bit_size,
                                             ConstString name) {
   for (auto &t : m_types) {
-    if (t->kind == kind && t->bit_size == bit_size && t->name == name)
+    if (t->kind == kind && t->bit_size == bit_size && t->name == name &&
+        t->element_type == nullptr && t->fields.empty())
       return t.get();
   }
   m_types.push_back(std::make_unique<FlangType>(
@@ -126,6 +127,27 @@ CompilerType TypeSystemFlang::GetCompilerType(FlangType *ft) {
   if (!ft)
     return CompilerType();
   return CompilerType(weak_from_this(), static_cast<void *>(ft));
+}
+
+FlangType *TypeSystemFlang::CreateStructureType(ConstString name,
+                                                uint32_t bit_size) {
+  auto ft = std::make_unique<FlangType>();
+  ft->kind = FlangTypeKind::eStructure;
+  ft->bit_size = bit_size;
+  ft->name = name;
+  ft->is_complete = false;
+  FlangType *ptr = ft.get();
+  m_types.push_back(std::move(ft));
+  return ptr;
+}
+
+void TypeSystemFlang::AddFieldToStructure(FlangType *struct_type,
+                                          ConstString name,
+                                          FlangType *field_type,
+                                          uint64_t bit_offset) {
+  if (!struct_type || struct_type->kind != FlangTypeKind::eStructure)
+    return;
+  struct_type->fields.push_back({name, field_type, bit_offset});
 }
 
 FlangType *TypeSystemFlang::CreatePointerType(FlangType *pointee,
@@ -256,6 +278,12 @@ bool TypeSystemFlang::IsVoidType(lldb::opaque_compiler_type_t type) {
   return false;
 }
 
+bool TypeSystemFlang::IsAggregateType(lldb::opaque_compiler_type_t type) {
+  auto *ft = GetFlangType(type);
+  if (!ft)
+    return false;
+  return ft->kind == FlangTypeKind::eStructure;
+}
 
 bool TypeSystemFlang::IsCharType(lldb::opaque_compiler_type_t type) {
   auto *ft = GetFlangType(type);
@@ -310,6 +338,8 @@ TypeSystemFlang::GetTypeClass(lldb::opaque_compiler_type_t type) {
     return lldb::eTypeClassInvalid;
 
   switch (ft->kind) {
+  case FlangTypeKind::eStructure:
+    return lldb::eTypeClassStruct;
   case FlangTypeKind::ePointer:
     return lldb::eTypeClassPointer;
   default:
@@ -339,6 +369,8 @@ uint32_t TypeSystemFlang::GetTypeInfo(
     return eTypeIsBuiltIn | eTypeHasValue | eTypeIsComplex | eTypeIsFloat;
   case FlangTypeKind::eCharacter:
     return eTypeIsBuiltIn | eTypeHasValue | eTypeHasChildren;
+  case FlangTypeKind::eStructure:
+    return eTypeHasChildren | eTypeIsStructUnion;
   case FlangTypeKind::ePointer:
     if (pointee_or_element_compiler_type && ft->element_type)
       *pointee_or_element_compiler_type = GetCompilerType(ft->element_type);
@@ -424,6 +456,8 @@ TypeSystemFlang::GetNumChildren(lldb::opaque_compiler_type_t type,
   if (!ft)
     return 0;
   switch (ft->kind) {
+  case FlangTypeKind::eStructure:
+    return static_cast<uint32_t>(ft->fields.size());
   case FlangTypeKind::ePointer:
     return ft->element_type ? 1 : 0;
   case FlangTypeKind::eComplex:
@@ -506,6 +540,18 @@ llvm::Expected<CompilerType> TypeSystemFlang::GetChildCompilerTypeAtIndex(
     child_name = "*";
     return GetCompilerType(ft->element_type);
   }
+  case FlangTypeKind::eStructure: {
+    if (idx >= ft->fields.size())
+      return llvm::createStringError("field index out of range");
+    const FlangFieldInfo &field = ft->fields[idx];
+    child_name = field.name.GetStringRef().str();
+    child_byte_offset = static_cast<int32_t>(field.bit_offset / 8);
+    if (field.type)
+      child_byte_size = field.type->bit_size / 8;
+    else
+      child_byte_size = 0;
+    return GetCompilerType(field.type);
+  }
   case FlangTypeKind::eComplex: {
     if (idx > 1)
       return llvm::createStringError("complex has only 2 children");
@@ -538,6 +584,14 @@ TypeSystemFlang::GetIndexOfChildWithName(lldb::opaque_compiler_type_t type,
                                    name.str().c_str());
   }
 
+  if (ft->kind == FlangTypeKind::eStructure) {
+    for (uint32_t i = 0; i < ft->fields.size(); ++i) {
+      if (ft->fields[i].name.GetStringRef() == name)
+        return i;
+    }
+    return llvm::createStringError("no child named '%s'",
+                                   name.str().c_str());
+  }
   if (ft->kind == FlangTypeKind::eComplex) {
     if (name == "real")
       return 0u;
@@ -550,7 +604,62 @@ TypeSystemFlang::GetIndexOfChildWithName(lldb::opaque_compiler_type_t type,
   return llvm::createStringError("type has no children");
 }
 
+size_t TypeSystemFlang::GetIndexOfChildMemberWithName(
+    lldb::opaque_compiler_type_t type, llvm::StringRef name,
+    bool omit_empty_base_classes, std::vector<uint32_t> &child_indexes) {
+  auto *ft = GetFlangType(type);
+  if (!ft)
+    return 0;
 
+  if (ft->kind == FlangTypeKind::eStructure) {
+    for (uint32_t i = 0; i < ft->fields.size(); ++i) {
+      if (ft->fields[i].name.GetStringRef() == name) {
+        child_indexes.push_back(i);
+        return 1;
+      }
+      // recurse into nested structures
+      if (ft->fields[i].type &&
+          ft->fields[i].type->kind == FlangTypeKind::eStructure) {
+        child_indexes.push_back(i);
+        size_t found = GetIndexOfChildMemberWithName(
+            static_cast<void *>(ft->fields[i].type), name,
+            omit_empty_base_classes, child_indexes);
+        if (found > 0)
+          return found;
+        child_indexes.pop_back();
+      }
+    }
+  }
+  return 0;
+}
+
+
+uint32_t TypeSystemFlang::GetNumFields(lldb::opaque_compiler_type_t type) {
+  auto *ft = GetFlangType(type);
+  if (ft && ft->kind == FlangTypeKind::eStructure)
+    return static_cast<uint32_t>(ft->fields.size());
+  return 0;
+}
+
+CompilerType TypeSystemFlang::GetFieldAtIndex(
+    lldb::opaque_compiler_type_t type, size_t idx, std::string &name,
+    uint64_t *bit_offset_ptr, uint32_t *bitfield_bit_size_ptr,
+    bool *is_bitfield_ptr) {
+  auto *ft = GetFlangType(type);
+  if (!ft || ft->kind != FlangTypeKind::eStructure ||
+      idx >= ft->fields.size())
+    return CompilerType();
+
+  const FlangFieldInfo &field = ft->fields[idx];
+  name = field.name.GetStringRef().str();
+  if (bit_offset_ptr)
+    *bit_offset_ptr = field.bit_offset;
+  if (bitfield_bit_size_ptr)
+    *bitfield_bit_size_ptr = 0;
+  if (is_bitfield_ptr)
+    *is_bitfield_ptr = false;
+  return GetCompilerType(field.type);
+}
 CompilerType
 TypeSystemFlang::GetPointeeType(lldb::opaque_compiler_type_t type) {
   auto *ft = GetFlangType(type);

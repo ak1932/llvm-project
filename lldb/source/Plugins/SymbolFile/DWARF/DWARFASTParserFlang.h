@@ -61,6 +61,9 @@ private:
   lldb::TypeSP ParseStringType(const lldb_private::plugin::dwarf::DWARFDIE &die);
   lldb::TypeSP
   ParsePointerType(const lldb_private::plugin::dwarf::DWARFDIE &die);
+  lldb::TypeSP ParseStructureType(
+      const lldb_private::SymbolContext &sc,
+      const lldb_private::plugin::dwarf::DWARFDIE &die);
 };
 
 #endif
