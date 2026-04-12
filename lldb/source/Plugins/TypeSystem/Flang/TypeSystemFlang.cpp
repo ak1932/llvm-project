@@ -115,7 +115,7 @@ FlangType *TypeSystemFlang::GetOrCreateType(FlangTypeKind kind,
                                             ConstString name) {
   for (auto &t : m_types) {
     if (t->kind == kind && t->bit_size == bit_size && t->name == name &&
-        t->element_type == nullptr && t->fields.empty())
+        t->element_type == nullptr && t->fields.empty() && t->dims.empty())
       return t.get();
   }
   m_types.push_back(std::make_unique<FlangType>(
@@ -127,6 +127,21 @@ CompilerType TypeSystemFlang::GetCompilerType(FlangType *ft) {
   if (!ft)
     return CompilerType();
   return CompilerType(weak_from_this(), static_cast<void *>(ft));
+}
+
+FlangType *
+TypeSystemFlang::CreateArrayType(FlangType *element,
+                                 std::vector<FlangArrayDimension> dims,
+                                 uint32_t bit_size, ConstString name) {
+  auto ft = std::make_unique<FlangType>();
+  ft->kind = FlangTypeKind::eArray;
+  ft->bit_size = bit_size;
+  ft->name = name;
+  ft->element_type = element;
+  ft->dims = std::move(dims);
+  FlangType *ptr = ft.get();
+  m_types.push_back(std::move(ft));
+  return ptr;
 }
 
 FlangType *TypeSystemFlang::CreateStructureType(ConstString name,
@@ -278,11 +293,32 @@ bool TypeSystemFlang::IsVoidType(lldb::opaque_compiler_type_t type) {
   return false;
 }
 
+bool TypeSystemFlang::IsArrayType(lldb::opaque_compiler_type_t type,
+                                  CompilerType *element_type, uint64_t *size,
+                                  bool *is_incomplete) {
+  auto *ft = GetFlangType(type);
+  if (!ft || ft->kind != FlangTypeKind::eArray)
+    return false;
+
+  if (element_type && ft->element_type)
+    *element_type = GetCompilerType(ft->element_type);
+  if (size) {
+    uint64_t total = 1;
+    for (auto &d : ft->dims)
+      total *= d.count;
+    *size = total;
+  }
+  if (is_incomplete)
+    *is_incomplete = ft->dims.empty();
+  return true;
+}
+
 bool TypeSystemFlang::IsAggregateType(lldb::opaque_compiler_type_t type) {
   auto *ft = GetFlangType(type);
   if (!ft)
     return false;
-  return ft->kind == FlangTypeKind::eStructure;
+  return ft->kind == FlangTypeKind::eStructure ||
+         ft->kind == FlangTypeKind::eArray;
 }
 
 bool TypeSystemFlang::IsCharType(lldb::opaque_compiler_type_t type) {
@@ -338,6 +374,8 @@ TypeSystemFlang::GetTypeClass(lldb::opaque_compiler_type_t type) {
     return lldb::eTypeClassInvalid;
 
   switch (ft->kind) {
+  case FlangTypeKind::eArray:
+    return lldb::eTypeClassArray;
   case FlangTypeKind::eStructure:
     return lldb::eTypeClassStruct;
   case FlangTypeKind::ePointer:
@@ -369,6 +407,10 @@ uint32_t TypeSystemFlang::GetTypeInfo(
     return eTypeIsBuiltIn | eTypeHasValue | eTypeIsComplex | eTypeIsFloat;
   case FlangTypeKind::eCharacter:
     return eTypeIsBuiltIn | eTypeHasValue | eTypeHasChildren;
+  case FlangTypeKind::eArray:
+    if (pointee_or_element_compiler_type && ft->element_type)
+      *pointee_or_element_compiler_type = GetCompilerType(ft->element_type);
+    return eTypeHasChildren | eTypeIsArray;
   case FlangTypeKind::eStructure:
     return eTypeHasChildren | eTypeIsStructUnion;
   case FlangTypeKind::ePointer:
@@ -448,6 +490,14 @@ lldb::Format TypeSystemFlang::GetFormat(lldb::opaque_compiler_type_t type) {
   }
 }
 
+
+static uint64_t GetTotalArrayElements(const FlangType *ft) {
+  uint64_t total = 1;
+  for (auto &d : ft->dims)
+    total *= d.count;
+  return total;
+}
+
 llvm::Expected<uint32_t>
 TypeSystemFlang::GetNumChildren(lldb::opaque_compiler_type_t type,
                                 bool omit_empty_base_classes,
@@ -456,6 +506,8 @@ TypeSystemFlang::GetNumChildren(lldb::opaque_compiler_type_t type,
   if (!ft)
     return 0;
   switch (ft->kind) {
+  case FlangTypeKind::eArray:
+    return static_cast<uint32_t>(GetTotalArrayElements(ft));
   case FlangTypeKind::eStructure:
     return static_cast<uint32_t>(ft->fields.size());
   case FlangTypeKind::ePointer:
@@ -540,6 +592,17 @@ llvm::Expected<CompilerType> TypeSystemFlang::GetChildCompilerTypeAtIndex(
     child_name = "*";
     return GetCompilerType(ft->element_type);
   }
+  case FlangTypeKind::eArray: {
+    if (!ft->element_type)
+      return llvm::createStringError("array has no element type");
+    uint64_t elem_bit_size = ft->element_type->bit_size;
+    child_byte_size = elem_bit_size / 8;
+    child_byte_offset = static_cast<int32_t>(idx * child_byte_size);
+    // as it is 1-based indexing: the lower_bound of the first dimension
+    int64_t lb = ft->dims.empty() ? 1 : ft->dims[0].lower_bound;
+    child_name = "(" + std::to_string(static_cast<int64_t>(idx) + lb) + ")";
+    return GetCompilerType(ft->element_type);
+  }
   case FlangTypeKind::eStructure: {
     if (idx >= ft->fields.size())
       return llvm::createStringError("field index out of range");
@@ -592,6 +655,7 @@ TypeSystemFlang::GetIndexOfChildWithName(lldb::opaque_compiler_type_t type,
     return llvm::createStringError("no child named '%s'",
                                    name.str().c_str());
   }
+
   if (ft->kind == FlangTypeKind::eComplex) {
     if (name == "real")
       return 0u;
@@ -660,6 +724,15 @@ CompilerType TypeSystemFlang::GetFieldAtIndex(
     *is_bitfield_ptr = false;
   return GetCompilerType(field.type);
 }
+CompilerType
+TypeSystemFlang::GetArrayElementType(lldb::opaque_compiler_type_t type,
+                                     ExecutionContextScope *exe_scope) {
+  auto *ft = GetFlangType(type);
+  if (ft && ft->kind == FlangTypeKind::eArray && ft->element_type)
+    return GetCompilerType(ft->element_type);
+  return CompilerType();
+}
+
 CompilerType
 TypeSystemFlang::GetPointeeType(lldb::opaque_compiler_type_t type) {
   auto *ft = GetFlangType(type);

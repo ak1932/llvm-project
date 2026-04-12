@@ -33,6 +33,7 @@ enum class FlangTypeKind {
   eCharacter,
   ePointer,
   eStructure,
+  eArray,
 };
 
 struct FlangType;
@@ -43,6 +44,11 @@ struct FlangFieldInfo {
   uint64_t bit_offset = 0;
 };
 
+struct FlangArrayDimension {
+  int64_t lower_bound = 1; // fortran arrays default to 1-based
+  uint64_t count = 0;
+};
+
 struct FlangType {
   FlangTypeKind kind = FlangTypeKind::eInvalid;
   uint32_t bit_size = 0;
@@ -50,6 +56,7 @@ struct FlangType {
 
   FlangType *element_type = nullptr;
   std::vector<FlangFieldInfo> fields;
+  std::vector<FlangArrayDimension> dims;
   uint64_t string_length = 0;
   bool is_complete = true;
 
@@ -84,6 +91,9 @@ class TypeSystemFlang : public TypeSystem {
   GetBuiltinTypeForDWARFEncodingAndBitSize(llvm::StringRef type_name,
                                            uint32_t dw_ate, uint32_t bit_size);
 
+  FlangType *CreateArrayType(FlangType *element,
+                             std::vector<FlangArrayDimension> dims,
+                             uint32_t bit_size, ConstString name);
   FlangType *CreateStructureType(ConstString name, uint32_t bit_size);
   void AddFieldToStructure(FlangType *struct_type, ConstString name,
                            FlangType *field_type, uint64_t bit_offset);
@@ -139,7 +149,7 @@ class TypeSystemFlang : public TypeSystem {
 
   bool IsArrayType(lldb::opaque_compiler_type_t type,
                    CompilerType *element_type, uint64_t *size,
-                   bool *is_incomplete) override { return false; }
+                   bool *is_incomplete) override;
 
   bool IsAggregateType(lldb::opaque_compiler_type_t type) override;
 
@@ -227,7 +237,7 @@ class TypeSystemFlang : public TypeSystem {
 
   CompilerType
   GetArrayElementType(lldb::opaque_compiler_type_t type,
-                      ExecutionContextScope *exe_scope) override { return CompilerType(); }
+                      ExecutionContextScope *exe_scope) override;
 
   CompilerType GetCanonicalType(lldb::opaque_compiler_type_t type) override;
 

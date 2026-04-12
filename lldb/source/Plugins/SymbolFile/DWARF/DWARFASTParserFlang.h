@@ -64,6 +64,8 @@ private:
   lldb::TypeSP ParseStructureType(
       const lldb_private::SymbolContext &sc,
       const lldb_private::plugin::dwarf::DWARFDIE &die);
+  lldb::TypeSP
+  ParseArrayType(const lldb_private::plugin::dwarf::DWARFDIE &die);
 };
 
 #endif

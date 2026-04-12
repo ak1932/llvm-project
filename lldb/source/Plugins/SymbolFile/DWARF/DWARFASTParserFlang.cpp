@@ -146,6 +146,9 @@ lldb::TypeSP DWARFASTParserFlang::ParseTypeFromDWARF(
   case DW_TAG_base_type:
     type_sp = ParseBaseType(die);
     break;
+  case DW_TAG_array_type:
+    type_sp = ParseArrayType(die);
+    break;
   case DW_TAG_structure_type:
   case DW_TAG_class_type:
     type_sp = ParseStructureType(sc, die);
@@ -193,6 +196,82 @@ DWARFASTParserFlang::ParseBaseType(const DWARFDIE &die) {
 
   Declaration decl;
   return dwarf->MakeType(die.GetID(), type_name,
+                         std::optional<uint64_t>(byte_size), nullptr,
+                         LLDB_INVALID_UID, Type::eEncodingIsUID, decl,
+                         compiler_type, Type::ResolveState::Full);
+}
+
+lldb::TypeSP
+DWARFASTParserFlang::ParseArrayType(const DWARFDIE &die) {
+  SymbolFileDWARF *dwarf = die.GetDWARF();
+
+  DWARFDIE type_die = die.GetAttributeValueAsReferenceDIE(DW_AT_type);
+  Type *element_lldb_type = dwarf->ResolveTypeUID(type_die, true);
+  if (!element_lldb_type)
+    return nullptr;
+
+  CompilerType element_compiler_type =
+      element_lldb_type->GetForwardCompilerType();
+  FlangType *element_ft = static_cast<FlangType *>(
+      element_compiler_type.GetOpaqueQualType());
+  if (!element_ft)
+    return nullptr;
+
+  // Parse subrange children for array dimensions
+  std::optional<SymbolFile::ArrayInfo> array_info =
+      ParseChildArrayInfo(die);
+
+  std::vector<FlangArrayDimension> dims;
+  uint64_t total_elements = 1;
+
+  if (array_info && !array_info->element_orders.empty()) {
+    for (auto count : array_info->element_orders) {
+    if (!count.has_value()) continue;
+      FlangArrayDimension dim;
+      dim.lower_bound = 1; // Fortran default
+      dim.count = count.value();
+      dims.push_back(dim);
+      total_elements *= count.value();
+    }
+  }
+
+  // Also try to get lower bounds from the DIE children directly
+  // (ParseChildArrayInfo doesn't always capture Fortran lower bounds)
+  size_t dim_idx = 0;
+  for (DWARFDIE child = die.GetFirstChild(); child;
+       child = child.GetSibling()) {
+    if (child.Tag() != DW_TAG_subrange_type)
+      continue;
+    if (dim_idx < dims.size()) {
+      int64_t lb = child.GetAttributeValueAsUnsigned(DW_AT_lower_bound, 1);
+      dims[dim_idx].lower_bound = lb;
+    }
+    dim_idx++;
+  }
+
+  uint32_t element_bit_size = element_ft->bit_size;
+  uint32_t total_bit_size =
+      static_cast<uint32_t>(total_elements * element_bit_size);
+
+  const char *name_cstr =
+      die.GetAttributeValueAsString(DW_AT_name, nullptr);
+  std::string array_name;
+  if (name_cstr) {
+    array_name = name_cstr;
+  } else {
+    array_name = element_ft->name.GetStringRef().str();
+    for (auto &d : dims)
+      array_name += "(" + std::to_string(d.count) + ")";
+  }
+
+  FlangType *array_ft = m_ast.CreateArrayType(
+      element_ft, std::move(dims), total_bit_size, ConstString(array_name));
+
+  CompilerType compiler_type = m_ast.GetCompilerType(array_ft);
+
+  uint64_t byte_size = total_bit_size / 8;
+  Declaration decl;
+  return dwarf->MakeType(die.GetID(), ConstString(array_name),
                          std::optional<uint64_t>(byte_size), nullptr,
                          LLDB_INVALID_UID, Type::eEncodingIsUID, decl,
                          compiler_type, Type::ResolveState::Full);
