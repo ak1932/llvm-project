@@ -1,5 +1,5 @@
-#include "DWARFASTParser.h"
 #include "DWARFASTParserFlang.h"
+#include "DWARFASTParser.h"
 #include "DWARFDIE.h"
 #include "DWARFUnit.h"
 #include "LogChannelDWARF.h"
@@ -108,9 +108,9 @@ Function *DWARFASTParserFlang::ParseFunctionFromDWARF(
   return nullptr;
 }
 
-lldb::TypeSP DWARFASTParserFlang::ParseTypeFromDWARF(
-    const SymbolContext &sc,
-    const DWARFDIE &die, bool *type_is_new_ptr) {
+lldb::TypeSP DWARFASTParserFlang::ParseTypeFromDWARF(const SymbolContext &sc,
+                                                     const DWARFDIE &die,
+                                                     bool *type_is_new_ptr) {
   if (type_is_new_ptr)
     *type_is_new_ptr = false;
 
@@ -173,23 +173,18 @@ lldb::TypeSP DWARFASTParserFlang::ParseTypeFromDWARF(
 
   return type_sp;
 }
-lldb::TypeSP
-DWARFASTParserFlang::ParseBaseType(const DWARFDIE &die) {
+lldb::TypeSP DWARFASTParserFlang::ParseBaseType(const DWARFDIE &die) {
   SymbolFileDWARF *dwarf = die.GetDWARF();
 
-  const char *name_cstr =
-      die.GetAttributeValueAsString(DW_AT_name, nullptr);
+  const char *name_cstr = die.GetAttributeValueAsString(DW_AT_name, nullptr);
   ConstString type_name(name_cstr ? name_cstr : "");
 
-  uint64_t byte_size =
-      die.GetAttributeValueAsUnsigned(DW_AT_byte_size, 0);
-  uint32_t encoding =
-      die.GetAttributeValueAsUnsigned(DW_AT_encoding, 0);
+  uint64_t byte_size = die.GetAttributeValueAsUnsigned(DW_AT_byte_size, 0);
+  uint32_t encoding = die.GetAttributeValueAsUnsigned(DW_AT_encoding, 0);
   uint32_t bit_size = byte_size * 8;
 
-  CompilerType compiler_type =
-      m_ast.GetBuiltinTypeForDWARFEncodingAndBitSize(
-          type_name.GetStringRef(), encoding, bit_size);
+  CompilerType compiler_type = m_ast.GetBuiltinTypeForDWARFEncodingAndBitSize(
+      type_name.GetStringRef(), encoding, bit_size);
 
   if (!compiler_type)
     return nullptr;
@@ -201,8 +196,7 @@ DWARFASTParserFlang::ParseBaseType(const DWARFDIE &die) {
                          compiler_type, Type::ResolveState::Full);
 }
 
-lldb::TypeSP
-DWARFASTParserFlang::ParseArrayType(const DWARFDIE &die) {
+lldb::TypeSP DWARFASTParserFlang::ParseArrayType(const DWARFDIE &die) {
   SymbolFileDWARF *dwarf = die.GetDWARF();
 
   DWARFDIE type_die = die.GetAttributeValueAsReferenceDIE(DW_AT_type);
@@ -212,21 +206,21 @@ DWARFASTParserFlang::ParseArrayType(const DWARFDIE &die) {
 
   CompilerType element_compiler_type =
       element_lldb_type->GetForwardCompilerType();
-  FlangType *element_ft = static_cast<FlangType *>(
-      element_compiler_type.GetOpaqueQualType());
+  FlangType *element_ft =
+      static_cast<FlangType *>(element_compiler_type.GetOpaqueQualType());
   if (!element_ft)
     return nullptr;
 
   // Parse subrange children for array dimensions
-  std::optional<SymbolFile::ArrayInfo> array_info =
-      ParseChildArrayInfo(die);
+  std::optional<SymbolFile::ArrayInfo> array_info = ParseChildArrayInfo(die);
 
   std::vector<FlangArrayDimension> dims;
   uint64_t total_elements = 1;
 
   if (array_info && !array_info->element_orders.empty()) {
     for (auto count : array_info->element_orders) {
-    if (!count.has_value()) continue;
+      if (!count.has_value())
+        continue;
       FlangArrayDimension dim;
       dim.lower_bound = 1; // Fortran default
       dim.count = count.value();
@@ -253,8 +247,7 @@ DWARFASTParserFlang::ParseArrayType(const DWARFDIE &die) {
   uint32_t total_bit_size =
       static_cast<uint32_t>(total_elements * element_bit_size);
 
-  const char *name_cstr =
-      die.GetAttributeValueAsString(DW_AT_name, nullptr);
+  const char *name_cstr = die.GetAttributeValueAsString(DW_AT_name, nullptr);
   std::string array_name;
   if (name_cstr) {
     array_name = name_cstr;
@@ -281,12 +274,10 @@ lldb::TypeSP DWARFASTParserFlang::ParseStructureType(const SymbolContext &sc,
                                                      const DWARFDIE &die) {
   SymbolFileDWARF *dwarf = die.GetDWARF();
 
-  const char *name_cstr =
-      die.GetAttributeValueAsString(DW_AT_name, nullptr);
+  const char *name_cstr = die.GetAttributeValueAsString(DW_AT_name, nullptr);
   ConstString type_name(name_cstr ? name_cstr : "");
 
-  uint64_t byte_size =
-      die.GetAttributeValueAsUnsigned(DW_AT_byte_size, 0);
+  uint64_t byte_size = die.GetAttributeValueAsUnsigned(DW_AT_byte_size, 0);
   uint32_t bit_size = static_cast<uint32_t>(byte_size * 8);
 
   FlangType *struct_ft = m_ast.CreateStructureType(type_name, bit_size);
@@ -310,8 +301,7 @@ lldb::TypeSP DWARFASTParserFlang::ParseStructureType(const SymbolContext &sc,
     FlangType *member_ft = nullptr;
     if (member_lldb_type) {
       CompilerType member_ct = member_lldb_type->GetForwardCompilerType();
-      member_ft =
-          static_cast<FlangType *>(member_ct.GetOpaqueQualType());
+      member_ft = static_cast<FlangType *>(member_ct.GetOpaqueQualType());
     }
 
     m_ast.AddFieldToStructure(struct_ft, member_name, member_ft,
@@ -329,13 +319,11 @@ lldb::TypeSP DWARFASTParserFlang::ParseStructureType(const SymbolContext &sc,
                          compiler_type, Type::ResolveState::Full);
 }
 
-lldb::TypeSP
-DWARFASTParserFlang::ParsePointerType(const DWARFDIE &die) {
+lldb::TypeSP DWARFASTParserFlang::ParsePointerType(const DWARFDIE &die) {
   SymbolFileDWARF *dwarf = die.GetDWARF();
 
-  uint64_t byte_size =
-      die.GetAttributeValueAsUnsigned(DW_AT_byte_size,
-                                      m_ast.GetPointerByteSize());
+  uint64_t byte_size = die.GetAttributeValueAsUnsigned(
+      DW_AT_byte_size, m_ast.GetPointerByteSize());
 
   DWARFDIE pointee_die = die.GetAttributeValueAsReferenceDIE(DW_AT_type);
   FlangType *pointee_ft = nullptr;
@@ -343,13 +331,12 @@ DWARFASTParserFlang::ParsePointerType(const DWARFDIE &die) {
     Type *pointee_lldb_type = dwarf->ResolveTypeUID(pointee_die, true);
     if (pointee_lldb_type) {
       CompilerType pointee_ct = pointee_lldb_type->GetForwardCompilerType();
-      pointee_ft =
-          static_cast<FlangType *>(pointee_ct.GetOpaqueQualType());
+      pointee_ft = static_cast<FlangType *>(pointee_ct.GetOpaqueQualType());
     }
   }
 
-  FlangType *ptr_ft = m_ast.CreatePointerType(
-      pointee_ft, static_cast<uint32_t>(byte_size * 8));
+  FlangType *ptr_ft =
+      m_ast.CreatePointerType(pointee_ft, static_cast<uint32_t>(byte_size * 8));
 
   CompilerType compiler_type = m_ast.GetCompilerType(ptr_ft);
 
@@ -360,16 +347,13 @@ DWARFASTParserFlang::ParsePointerType(const DWARFDIE &die) {
                          compiler_type, Type::ResolveState::Full);
 }
 
-lldb::TypeSP
-DWARFASTParserFlang::ParseStringType(const DWARFDIE &die) {
+lldb::TypeSP DWARFASTParserFlang::ParseStringType(const DWARFDIE &die) {
   SymbolFileDWARF *dwarf = die.GetDWARF();
 
-  const char *name_cstr =
-      die.GetAttributeValueAsString(DW_AT_name, nullptr);
+  const char *name_cstr = die.GetAttributeValueAsString(DW_AT_name, nullptr);
   ConstString type_name(name_cstr ? name_cstr : "character");
 
-  uint64_t byte_size =
-      die.GetAttributeValueAsUnsigned(DW_AT_byte_size, 0);
+  uint64_t byte_size = die.GetAttributeValueAsUnsigned(DW_AT_byte_size, 0);
   if (byte_size == 0) {
     // Try DW_AT_string_length as a constant
     byte_size = die.GetAttributeValueAsUnsigned(DW_AT_string_length, 1);

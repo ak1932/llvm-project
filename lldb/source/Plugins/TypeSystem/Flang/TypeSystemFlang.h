@@ -67,25 +67,24 @@ struct FlangType {
 };
 
 class TypeSystemFlang : public TypeSystem {
-    static char ID;
+  static char ID;
 
+public:
+  TypeSystemFlang() = default;
+  ~TypeSystemFlang() override;
 
-    public:
-    TypeSystemFlang() = default;
-    ~TypeSystemFlang() override;
+  static void Initialize();
+  static void Terminate();
 
-    static void Initialize();
-    static void Terminate();
+  // PluginInterface functions
+  llvm::StringRef GetPluginName() override { return GetPluginNameStatic(); }
+  static llvm::StringRef GetPluginNameStatic() { return "flang"; }
 
-    // PluginInterface functions
-    llvm::StringRef GetPluginName() override { return GetPluginNameStatic(); }
-    static llvm::StringRef GetPluginNameStatic() { return "flang"; }
+  static LanguageSet GetSupportedLanguagesForTypes();
+  static LanguageSet GetSupportedLanguagesForExpressions();
 
-    static LanguageSet GetSupportedLanguagesForTypes();
-    static LanguageSet GetSupportedLanguagesForExpressions();
-
-    static lldb::TypeSystemSP CreateInstance(lldb::LanguageType language,
-                                             Module *module, Target *target);
+  static lldb::TypeSystemSP CreateInstance(lldb::LanguageType language,
+                                           Module *module, Target *target);
 
   CompilerType
   GetBuiltinTypeForDWARFEncodingAndBitSize(llvm::StringRef type_name,
@@ -108,37 +107,50 @@ class TypeSystemFlang : public TypeSystem {
 
   bool SupportsLanguage(lldb::LanguageType language) override;
 
-
   // LLVM RTTI support
   // llvm casting support
   bool isA(const void *ClassID) const override { return ClassID == &ID; }
   static bool classof(const TypeSystem *ts) { return ts->isA(&ID); }
-
 
   /// Free up any resources associated with this TypeSystem.  Done before
   /// removing all the TypeSystems from the TypeSystemMap.
   void Finalize() override;
 
   // CompilerDecl functions
-  ConstString DeclGetName(void *opaque_decl) override { return ConstString {"decl-get-name"}; }
+  ConstString DeclGetName(void *opaque_decl) override {
+    return ConstString{"decl-get-name"};
+  }
 
-  ConstString DeclGetMangledName(void *opaque_decl) override { return ConstString {"decl-get-mangled-name"}; }
+  ConstString DeclGetMangledName(void *opaque_decl) override {
+    return ConstString{"decl-get-mangled-name"};
+  }
 
-  CompilerType GetTypeForDecl(void *opaque_decl) override { return CompilerType(); }
+  CompilerType GetTypeForDecl(void *opaque_decl) override {
+    return CompilerType();
+  }
 
   // CompilerDeclContext functions
 
-  ConstString DeclContextGetName(void *opaque_decl_ctx) override { return ConstString {"decl-ctx-get-name"}; }
+  ConstString DeclContextGetName(void *opaque_decl_ctx) override {
+    return ConstString{"decl-ctx-get-name"};
+  }
 
-  ConstString
-  DeclContextGetScopeQualifiedName(void *opaque_decl_ctx) override { return ConstString {"decl-ctx-scope-qual-name"}; }
+  ConstString DeclContextGetScopeQualifiedName(void *opaque_decl_ctx) override {
+    return ConstString{"decl-ctx-scope-qual-name"};
+  }
 
-  bool DeclContextIsClassMethod(void *opaque_decl_ctx) override { return false; }
+  bool DeclContextIsClassMethod(void *opaque_decl_ctx) override {
+    return false;
+  }
 
   bool DeclContextIsContainedInLookup(void *opaque_decl_ctx,
-                                              void *other_opaque_decl_ctx) override { return false; }
+                                      void *other_opaque_decl_ctx) override {
+    return false;
+  }
 
-  lldb::LanguageType DeclContextGetLanguage(void *opaque_decl_ctx) override { return lldb::eLanguageTypeFortran95; }
+  lldb::LanguageType DeclContextGetLanguage(void *opaque_decl_ctx) override {
+    return lldb::eLanguageTypeFortran95;
+  }
 
   // Tests
 #ifndef NDEBUG
@@ -159,31 +171,45 @@ class TypeSystemFlang : public TypeSystem {
   bool IsDefined(lldb::opaque_compiler_type_t type) override;
   bool IsFloatingPointType(lldb::opaque_compiler_type_t type) override;
 
-  bool IsFunctionType(lldb::opaque_compiler_type_t type) override { return false; }
+  bool IsFunctionType(lldb::opaque_compiler_type_t type) override {
+    return false;
+  }
 
   size_t
-  GetNumberOfFunctionArguments(lldb::opaque_compiler_type_t type) override { return false; }
+  GetNumberOfFunctionArguments(lldb::opaque_compiler_type_t type) override {
+    return false;
+  }
 
-  CompilerType
-  GetFunctionArgumentAtIndex(lldb::opaque_compiler_type_t type,
-                             const size_t index) override { return CompilerType(); }
+  CompilerType GetFunctionArgumentAtIndex(lldb::opaque_compiler_type_t type,
+                                          const size_t index) override {
+    return CompilerType();
+  }
 
-  bool IsFunctionPointerType(lldb::opaque_compiler_type_t type) override { return false; }
+  bool IsFunctionPointerType(lldb::opaque_compiler_type_t type) override {
+    return false;
+  }
 
-  bool
-  IsMemberFunctionPointerType(lldb::opaque_compiler_type_t type) override { return false; }
+  bool IsMemberFunctionPointerType(lldb::opaque_compiler_type_t type) override {
+    return false;
+  }
 
   bool IsBlockPointerType(lldb::opaque_compiler_type_t type,
-                          CompilerType *function_pointer_type_ptr) override { return false; }
+                          CompilerType *function_pointer_type_ptr) override {
+    return false;
+  }
 
   bool IsIntegerType(lldb::opaque_compiler_type_t type,
                      bool &is_signed) override;
 
-  bool IsScopedEnumerationType(lldb::opaque_compiler_type_t type) override { return false; }
+  bool IsScopedEnumerationType(lldb::opaque_compiler_type_t type) override {
+    return false;
+  }
 
   bool IsPossibleDynamicType(lldb::opaque_compiler_type_t type,
-                             CompilerType *target_type,
-                             bool check_cplusplus, bool check_objc) override { return false; }
+                             CompilerType *target_type, bool check_cplusplus,
+                             bool check_objc) override {
+    return false;
+  }
 
   bool IsPointerType(lldb::opaque_compiler_type_t type,
                      CompilerType *pointee_type) override;
@@ -206,15 +232,21 @@ class TypeSystemFlang : public TypeSystem {
 
   uint32_t GetPointerByteSize() override { return 8; }
 
-  CompilerType GetPointerDiffType(bool is_signed) override { return CompilerType(); }
+  CompilerType GetPointerDiffType(bool is_signed) override {
+    return CompilerType();
+  }
 
-  unsigned GetPtrAuthKey(lldb::opaque_compiler_type_t type) override { return 0; }
+  unsigned GetPtrAuthKey(lldb::opaque_compiler_type_t type) override {
+    return 0;
+  }
 
-  unsigned
-  GetPtrAuthDiscriminator(lldb::opaque_compiler_type_t type) override { return 0; }
+  unsigned GetPtrAuthDiscriminator(lldb::opaque_compiler_type_t type) override {
+    return 0;
+  }
 
-  bool
-  GetPtrAuthAddressDiversity(lldb::opaque_compiler_type_t type) override { return 0; }
+  bool GetPtrAuthAddressDiversity(lldb::opaque_compiler_type_t type) override {
+    return 0;
+  }
 
   // Accessors
 
@@ -225,40 +257,51 @@ class TypeSystemFlang : public TypeSystem {
 
   ConstString GetMangledTypeName(lldb::opaque_compiler_type_t type) override;
 
-  uint32_t
-  GetTypeInfo(lldb::opaque_compiler_type_t type,
-              CompilerType *pointee_or_element_compiler_type) override;
+  uint32_t GetTypeInfo(lldb::opaque_compiler_type_t type,
+                       CompilerType *pointee_or_element_compiler_type) override;
 
   lldb::LanguageType
-  GetMinimumLanguage(lldb::opaque_compiler_type_t type) override { return lldb::eLanguageTypeFortran95; }
-
+  GetMinimumLanguage(lldb::opaque_compiler_type_t type) override {
+    return lldb::eLanguageTypeFortran95;
+  }
 
   lldb::TypeClass GetTypeClass(lldb::opaque_compiler_type_t type) override;
 
-  CompilerType
-  GetArrayElementType(lldb::opaque_compiler_type_t type,
-                      ExecutionContextScope *exe_scope) override;
+  CompilerType GetArrayElementType(lldb::opaque_compiler_type_t type,
+                                   ExecutionContextScope *exe_scope) override;
 
   CompilerType GetCanonicalType(lldb::opaque_compiler_type_t type) override;
 
   CompilerType
-  GetEnumerationIntegerType(lldb::opaque_compiler_type_t type) override { return CompilerType(); }
+  GetEnumerationIntegerType(lldb::opaque_compiler_type_t type) override {
+    return CompilerType();
+  }
 
   // Returns -1 if this isn't a function of if the function doesn't have a
   // prototype Returns a value >= 0 if there is a prototype.
-  int GetFunctionArgumentCount(lldb::opaque_compiler_type_t type) override { return -1; }
+  int GetFunctionArgumentCount(lldb::opaque_compiler_type_t type) override {
+    return -1;
+  }
+
+  CompilerType GetFunctionArgumentTypeAtIndex(lldb::opaque_compiler_type_t type,
+                                              size_t idx) override {
+    return CompilerType();
+  }
 
   CompilerType
-  GetFunctionArgumentTypeAtIndex(lldb::opaque_compiler_type_t type,
-                                 size_t idx) override { return CompilerType(); }
+  GetFunctionReturnType(lldb::opaque_compiler_type_t type) override {
+    return CompilerType();
+  }
 
-  CompilerType
-  GetFunctionReturnType(lldb::opaque_compiler_type_t type) override { return CompilerType(); }
-
-  size_t GetNumMemberFunctions(lldb::opaque_compiler_type_t type) override { return 0; }
+  size_t GetNumMemberFunctions(lldb::opaque_compiler_type_t type) override {
+    return 0;
+  }
 
   TypeMemberFunctionImpl
-  GetMemberFunctionAtIndex(lldb::opaque_compiler_type_t type, size_t idx) override { return TypeMemberFunctionImpl{}; }
+  GetMemberFunctionAtIndex(lldb::opaque_compiler_type_t type,
+                           size_t idx) override {
+    return TypeMemberFunctionImpl{};
+  }
 
   CompilerType GetPointeeType(lldb::opaque_compiler_type_t type) override;
 
@@ -266,8 +309,8 @@ class TypeSystemFlang : public TypeSystem {
 
   // Exploring the type
 
-  const llvm::fltSemantics &
-  GetFloatTypeSemantics(size_t byte_size, lldb::Format format) override;
+  const llvm::fltSemantics &GetFloatTypeSemantics(size_t byte_size,
+                                                  lldb::Format format) override;
 
   llvm::Expected<uint64_t>
   GetBitSize(lldb::opaque_compiler_type_t type,
@@ -287,25 +330,31 @@ class TypeSystemFlang : public TypeSystem {
 
   uint32_t GetNumFields(lldb::opaque_compiler_type_t type) override;
 
-  CompilerType GetFieldAtIndex(lldb::opaque_compiler_type_t type,
-                                       size_t idx, std::string &name,
-                                       uint64_t *bit_offset_ptr,
-                                       uint32_t *bitfield_bit_size_ptr,
-                                       bool *is_bitfield_ptr) override;
+  CompilerType GetFieldAtIndex(lldb::opaque_compiler_type_t type, size_t idx,
+                               std::string &name, uint64_t *bit_offset_ptr,
+                               uint32_t *bitfield_bit_size_ptr,
+                               bool *is_bitfield_ptr) override;
+
+  uint32_t GetNumDirectBaseClasses(lldb::opaque_compiler_type_t type) override {
+    return 0;
+  }
 
   uint32_t
-  GetNumDirectBaseClasses(lldb::opaque_compiler_type_t type) override { return 0; }
+  GetNumVirtualBaseClasses(lldb::opaque_compiler_type_t type) override {
+    return 0;
+  }
 
-  uint32_t
-  GetNumVirtualBaseClasses(lldb::opaque_compiler_type_t type) override { return 0; }
+  CompilerType GetDirectBaseClassAtIndex(lldb::opaque_compiler_type_t type,
+                                         size_t idx,
+                                         uint32_t *bit_offset_ptr) override {
+    return CompilerType{};
+  }
 
-  CompilerType
-  GetDirectBaseClassAtIndex(lldb::opaque_compiler_type_t type, size_t idx,
-                            uint32_t *bit_offset_ptr) override { return CompilerType {}; }
-
-  CompilerType
-  GetVirtualBaseClassAtIndex(lldb::opaque_compiler_type_t type, size_t idx,
-                             uint32_t *bit_offset_ptr) override { return CompilerType {}; }
+  CompilerType GetVirtualBaseClassAtIndex(lldb::opaque_compiler_type_t type,
+                                          size_t idx,
+                                          uint32_t *bit_offset_ptr) override {
+    return CompilerType{};
+  }
 
   llvm::Expected<CompilerType>
   GetDereferencedType(lldb::opaque_compiler_type_t type,
@@ -329,11 +378,15 @@ class TypeSystemFlang : public TypeSystem {
                           llvm::StringRef name,
                           bool omit_empty_base_classes) override;
 
-  size_t GetIndexOfChildMemberWithName(
-      lldb::opaque_compiler_type_t type, llvm::StringRef name,
-      bool omit_empty_base_classes, std::vector<uint32_t> &child_indexes) override;
+  size_t
+  GetIndexOfChildMemberWithName(lldb::opaque_compiler_type_t type,
+                                llvm::StringRef name,
+                                bool omit_empty_base_classes,
+                                std::vector<uint32_t> &child_indexes) override;
 
-  bool IsTemplateType(lldb::opaque_compiler_type_t type) override { return false; }
+  bool IsTemplateType(lldb::opaque_compiler_type_t type) override {
+    return false;
+  }
 
   // TODO: what here?
   void dump(lldb::opaque_compiler_type_t) const override {}
@@ -341,8 +394,7 @@ class TypeSystemFlang : public TypeSystem {
   bool DumpTypeValue(lldb::opaque_compiler_type_t type, Stream &s,
                      lldb::Format format, const DataExtractor &data,
                      lldb::offset_t data_offset, size_t data_byte_size,
-                     uint32_t bitfield_bit_size,
-                     uint32_t bitfield_bit_offset,
+                     uint32_t bitfield_bit_size, uint32_t bitfield_bit_offset,
                      ExecutionContextScope *exe_scope) override;
 
   /// Dump the type to stdout.
@@ -368,52 +420,72 @@ class TypeSystemFlang : public TypeSystem {
   /// dump decls whose names contain \c filter.
   /// \param[in] show_color If true, prints the AST color-highlighted.
   void Dump(llvm::raw_ostream &output, llvm::StringRef filter,
-                bool show_color) override {}
+            bool show_color) override {}
 
-  bool IsRuntimeGeneratedType(lldb::opaque_compiler_type_t type) override { return false; }
+  bool IsRuntimeGeneratedType(lldb::opaque_compiler_type_t type) override {
+    return false;
+  }
 
   bool IsPointerOrReferenceType(lldb::opaque_compiler_type_t type,
                                 CompilerType *pointee_type) override;
 
-  unsigned GetTypeQualifiers(lldb::opaque_compiler_type_t type) override { return 0; }
+  unsigned GetTypeQualifiers(lldb::opaque_compiler_type_t type) override {
+    return 0;
+  }
 
   std::optional<size_t>
   GetTypeBitAlign(lldb::opaque_compiler_type_t type,
                   ExecutionContextScope *exe_scope) override;
 
   CompilerType GetBasicTypeFromAST(lldb::BasicType basic_type) override {
-      return CompilerType {};
+    return CompilerType{};
   };
 
-  CompilerType
-  GetBuiltinTypeForEncodingAndBitSize(lldb::Encoding encoding,
-                                      size_t bit_size) override { return CompilerType {}; }
+  CompilerType GetBuiltinTypeForEncodingAndBitSize(lldb::Encoding encoding,
+                                                   size_t bit_size) override {
+    return CompilerType{};
+  }
 
-  bool IsBeingDefined(lldb::opaque_compiler_type_t type) override { return false; }
+  bool IsBeingDefined(lldb::opaque_compiler_type_t type) override {
+    return false;
+  }
 
   bool IsConst(lldb::opaque_compiler_type_t type) override { return false; }
 
   uint32_t IsHomogeneousAggregate(lldb::opaque_compiler_type_t type,
-                                  CompilerType *base_type_ptr) override { return 0; }
+                                  CompilerType *base_type_ptr) override {
+    return 0;
+  }
 
-  bool IsPolymorphicClass(lldb::opaque_compiler_type_t type) override { return false; }
+  bool IsPolymorphicClass(lldb::opaque_compiler_type_t type) override {
+    return false;
+  }
 
-  bool IsTypedefType(lldb::opaque_compiler_type_t type) override { return false; }
+  bool IsTypedefType(lldb::opaque_compiler_type_t type) override {
+    return false;
+  }
 
   // If the current object represents a typedef type, get the underlying type
-  CompilerType GetTypedefedType(lldb::opaque_compiler_type_t type) override { return CompilerType {}; }
+  CompilerType GetTypedefedType(lldb::opaque_compiler_type_t type) override {
+    return CompilerType{};
+  }
 
   bool IsVectorType(lldb::opaque_compiler_type_t type,
-                    CompilerType *element_type, uint64_t *size) override { return false; }
+                    CompilerType *element_type, uint64_t *size) override {
+    return false;
+  }
 
   CompilerType
   GetFullyUnqualifiedType(lldb::opaque_compiler_type_t type) override;
 
-  CompilerType
-  GetNonReferenceType(lldb::opaque_compiler_type_t type) override { return CompilerType {}; }
+  CompilerType GetNonReferenceType(lldb::opaque_compiler_type_t type) override {
+    return CompilerType{};
+  }
 
   bool IsReferenceType(lldb::opaque_compiler_type_t type,
-                               CompilerType *pointee_type, bool *is_rvalue) override { return false; }
+                       CompilerType *pointee_type, bool *is_rvalue) override {
+    return false;
+  }
 
   static llvm::Triple m_triple;
   static lldb::TargetWP m_target_wp;

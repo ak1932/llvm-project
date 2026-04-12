@@ -1,3 +1,5 @@
+#include "TypeSystemFlang.h"
+#include "Plugins/SymbolFile/DWARF/DWARFASTParserFlang.h"
 #include "lldb/Core/DumpDataExtractor.h"
 #include "lldb/Core/PluginManager.h"
 #include "lldb/Host/StreamFile.h"
@@ -5,8 +7,6 @@
 #include "lldb/Target/Target.h"
 #include "lldb/Utility/LLDBLog.h"
 #include "lldb/Utility/Log.h"
-#include "Plugins/SymbolFile/DWARF/DWARFASTParserFlang.h"
-#include "TypeSystemFlang.h"
 #include "lldb/Utility/Stream.h"
 #include "lldb/lldb-enumerations.h"
 #include "lldb/lldb-types.h"
@@ -19,10 +19,7 @@ using namespace lldb_private::plugin::dwarf;
 
 LLDB_PLUGIN_DEFINE(TypeSystemFlang);
 
-
-void TypeSystemFlang::Finalize() {
-    m_types.clear();
-}
+void TypeSystemFlang::Finalize() { m_types.clear(); }
 
 char TypeSystemFlang::ID;
 
@@ -50,15 +47,16 @@ LanguageSet TypeSystemFlang::GetSupportedLanguagesForExpressions() {
   return languages;
 }
 
-
 static inline bool
 TypeSystemFlangSupportsLanguage(lldb::LanguageType language) {
-  return language == lldb::eLanguageTypeFortran77 || 
-          language == lldb::eLanguageTypeFortran90 || 
-          language == lldb::eLanguageTypeFortran95; 
+  return language == lldb::eLanguageTypeFortran77 ||
+         language == lldb::eLanguageTypeFortran90 ||
+         language == lldb::eLanguageTypeFortran95;
 }
 
-bool TypeSystemFlang::SupportsLanguage(lldb::LanguageType language) { return TypeSystemFlangSupportsLanguage(language); }
+bool TypeSystemFlang::SupportsLanguage(lldb::LanguageType language) {
+  return TypeSystemFlangSupportsLanguage(language);
+}
 
 llvm::Triple TypeSystemFlang::m_triple;
 lldb::TargetWP TypeSystemFlang::m_target_wp;
@@ -109,7 +107,6 @@ void TypeSystemFlang::Terminate() {
   PluginManager::UnregisterPlugin(CreateInstance);
 }
 
-
 FlangType *TypeSystemFlang::GetOrCreateType(FlangTypeKind kind,
                                             uint32_t bit_size,
                                             ConstString name) {
@@ -118,8 +115,8 @@ FlangType *TypeSystemFlang::GetOrCreateType(FlangTypeKind kind,
         t->element_type == nullptr && t->fields.empty() && t->dims.empty())
       return t.get();
   }
-  m_types.push_back(std::make_unique<FlangType>(
-      FlangType{kind, bit_size, name}));
+  m_types.push_back(
+      std::make_unique<FlangType>(FlangType{kind, bit_size, name}));
   return m_types.back().get();
 }
 
@@ -227,8 +224,7 @@ CompilerType TypeSystemFlang::GetBuiltinTypeForDWARFEncodingAndBitSize(
     return CompilerType();
   }
 
-  FlangType *ft =
-      GetOrCreateType(kind, bit_size, ConstString(type_name));
+  FlangType *ft = GetOrCreateType(kind, bit_size, ConstString(type_name));
   return CompilerType(weak_from_this(), static_cast<void *>(ft));
 }
 
@@ -385,9 +381,9 @@ TypeSystemFlang::GetTypeClass(lldb::opaque_compiler_type_t type) {
   }
 }
 
-uint32_t TypeSystemFlang::GetTypeInfo(
-    lldb::opaque_compiler_type_t type,
-    CompilerType *pointee_or_element_compiler_type) {
+uint32_t
+TypeSystemFlang::GetTypeInfo(lldb::opaque_compiler_type_t type,
+                             CompilerType *pointee_or_element_compiler_type) {
   if (pointee_or_element_compiler_type)
     pointee_or_element_compiler_type->Clear();
 
@@ -424,10 +420,10 @@ uint32_t TypeSystemFlang::GetTypeInfo(
 
 CompilerType
 TypeSystemFlang::GetCanonicalType(lldb::opaque_compiler_type_t type) {
-    if (type) {
-        return CompilerType(weak_from_this(), type);
-    }
-    return CompilerType();
+  if (type) {
+    return CompilerType(weak_from_this(), type);
+  }
+  return CompilerType();
 }
 
 CompilerType
@@ -445,8 +441,7 @@ TypeSystemFlang::GetBitSize(lldb::opaque_compiler_type_t type,
   return llvm::createStringError("invalid type");
 }
 
-lldb::Encoding
-TypeSystemFlang::GetEncoding(lldb::opaque_compiler_type_t type) {
+lldb::Encoding TypeSystemFlang::GetEncoding(lldb::opaque_compiler_type_t type) {
   auto *ft = GetFlangType(type);
   if (!ft)
     return lldb::eEncodingInvalid;
@@ -489,7 +484,6 @@ lldb::Format TypeSystemFlang::GetFormat(lldb::opaque_compiler_type_t type) {
     return lldb::eFormatDefault;
   }
 }
-
 
 static uint64_t GetTotalArrayElements(const FlangType *ft) {
   uint64_t total = 1;
@@ -553,7 +547,6 @@ TypeSystemFlang::GetBasicTypeEnumeration(lldb::opaque_compiler_type_t type) {
     return lldb::eBasicTypeInvalid;
   }
 }
-
 
 std::optional<size_t>
 TypeSystemFlang::GetTypeBitAlign(lldb::opaque_compiler_type_t type,
@@ -631,7 +624,6 @@ llvm::Expected<CompilerType> TypeSystemFlang::GetChildCompilerTypeAtIndex(
   }
 }
 
-
 llvm::Expected<uint32_t>
 TypeSystemFlang::GetIndexOfChildWithName(lldb::opaque_compiler_type_t type,
                                          llvm::StringRef name,
@@ -643,8 +635,7 @@ TypeSystemFlang::GetIndexOfChildWithName(lldb::opaque_compiler_type_t type,
   if (ft->kind == FlangTypeKind::ePointer) {
     if (name == "*")
       return 0u;
-    return llvm::createStringError("no child named '%s'",
-                                   name.str().c_str());
+    return llvm::createStringError("no child named '%s'", name.str().c_str());
   }
 
   if (ft->kind == FlangTypeKind::eStructure) {
@@ -652,8 +643,7 @@ TypeSystemFlang::GetIndexOfChildWithName(lldb::opaque_compiler_type_t type,
       if (ft->fields[i].name.GetStringRef() == name)
         return i;
     }
-    return llvm::createStringError("no child named '%s'",
-                                   name.str().c_str());
+    return llvm::createStringError("no child named '%s'", name.str().c_str());
   }
 
   if (ft->kind == FlangTypeKind::eComplex) {
@@ -661,8 +651,7 @@ TypeSystemFlang::GetIndexOfChildWithName(lldb::opaque_compiler_type_t type,
       return 0u;
     if (name == "imag")
       return 1u;
-    return llvm::createStringError("no child named '%s'",
-                                   name.str().c_str());
+    return llvm::createStringError("no child named '%s'", name.str().c_str());
   }
 
   return llvm::createStringError("type has no children");
@@ -697,7 +686,6 @@ size_t TypeSystemFlang::GetIndexOfChildMemberWithName(
   return 0;
 }
 
-
 uint32_t TypeSystemFlang::GetNumFields(lldb::opaque_compiler_type_t type) {
   auto *ft = GetFlangType(type);
   if (ft && ft->kind == FlangTypeKind::eStructure)
@@ -705,13 +693,13 @@ uint32_t TypeSystemFlang::GetNumFields(lldb::opaque_compiler_type_t type) {
   return 0;
 }
 
-CompilerType TypeSystemFlang::GetFieldAtIndex(
-    lldb::opaque_compiler_type_t type, size_t idx, std::string &name,
-    uint64_t *bit_offset_ptr, uint32_t *bitfield_bit_size_ptr,
-    bool *is_bitfield_ptr) {
+CompilerType TypeSystemFlang::GetFieldAtIndex(lldb::opaque_compiler_type_t type,
+                                              size_t idx, std::string &name,
+                                              uint64_t *bit_offset_ptr,
+                                              uint32_t *bitfield_bit_size_ptr,
+                                              bool *is_bitfield_ptr) {
   auto *ft = GetFlangType(type);
-  if (!ft || ft->kind != FlangTypeKind::eStructure ||
-      idx >= ft->fields.size())
+  if (!ft || ft->kind != FlangTypeKind::eStructure || idx >= ft->fields.size())
     return CompilerType();
 
   const FlangFieldInfo &field = ft->fields[idx];
@@ -753,8 +741,7 @@ TypeSystemFlang::GetPointerType(lldb::opaque_compiler_type_t type) {
 llvm::Expected<CompilerType> TypeSystemFlang::GetDereferencedType(
     lldb::opaque_compiler_type_t type, ExecutionContext *exe_ctx,
     std::string &deref_name, uint32_t &deref_byte_size,
-    int32_t &deref_byte_offset, ValueObject *valobj,
-    uint64_t &language_flags) {
+    int32_t &deref_byte_offset, ValueObject *valobj, uint64_t &language_flags) {
   auto *ft = GetFlangType(type);
   if (!ft || ft->kind != FlangTypeKind::ePointer || !ft->element_type)
     return llvm::createStringError("not a pointer type");

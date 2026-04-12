@@ -29,7 +29,7 @@ class SymbolFileDWARF;
 
 class DWARFASTParser {
 public:
-  enum class Kind { DWARFASTParserClang, DWARFASTParserFlang};
+  enum class Kind { DWARFASTParserClang, DWARFASTParserFlang };
   DWARFASTParser(Kind kind) : m_kind(kind) {}
 
   virtual ~DWARFASTParser() = default;
